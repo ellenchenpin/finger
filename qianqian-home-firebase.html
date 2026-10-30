@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>錢錢的家</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+<style>
+:root{--bg:#f4f4f4}
+@media (prefers-color-scheme:dark){:root{--bg:#1c1c1e}}
+body{margin:0;background:var(--bg);font-family:'Inter','Noto Sans TC',system-ui,sans-serif;color:#000;white-space:nowrap}
+input,select,button{font:inherit}
+input[type=date]{text-align:center}input::-webkit-date-and-time-value{text-align:center}
+.no-sb::-webkit-scrollbar{display:none}.no-sb{scrollbar-width:none}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){main{animation:none!important}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script type="text/babel">
+const {useState,useMemo,useEffect,useLayoutEffect,useRef,useContext} = React;
+
+/* ============ Firebase 設定（請核對 apiKey / appId 是否與你的 Firebase 主控台一致） ============ */
+const firebaseConfig = {
+  apiKey: "AIzaSyA1pJuUsQxteEVcbTus2jFWuNj1cGHTbXQ",
+  authDomain: "ellen-money.firebaseapp.com",
+  projectId: "ellen-money",
+  storageBucket: "ellen-money.firebasestorage.app",
+  messagingSenderId: "33835896222",
+  appId: "1:33835896222:web:3d734ee7cd024eb3051a8f",
+  measurementId: "G-G1421ZCS7J"
+};
+const CONFIGURED = !firebaseConfig.apiKey.startsWith('YOUR_');
+let auth=null, db=null;
+if (CONFIGURED) { firebase.initializeApp(firebaseConfig); auth=firebase.auth(); db=firebase.firestore(); }
+
+/* ============ 工具 ============ */
+let HIDE=false;   // 隱藏數字（App 每次 render 時同步）
+const fmt=n=>HIDE?'••••':'$'+Math.round(n).toLocaleString('en-US');
+const fmt2=n=>HIDE?'••••••':'$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtK=n=>HIDE?'••':n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1e3?'$'+Math.round(n/1e3)+'K':'$'+Math.round(n);   // $100K … $900K、$1.0M、$1.5M
+const fmtPct=v=>v==null?'—':(v>=0?'+':'')+v.toFixed(1)+'%';
+const YEAR=2026;
+const uid=()=>Math.random().toString(36).slice(2,8);
+const TABS=['我的資產','資產細節','未來目標','每月記帳'];
+const INCOME_CATS=['薪水','利息','獎金','股票','其他'];
+const EXPENSE_CATS=['餐飲','採買','居家','交通','旅行','娛樂','其他'];
+const PRI={high:{l:'高',c:'#ef4444'},mid:{l:'中',c:'#fb923c'},low:{l:'低',c:'#facc15'}};
+
+/* ============ 統一資料來源 mockData ============ */
+const mockData = {   // 空白範本（無範例資料）
+  schema:4, appName:'錢錢💰',
+  profile:{nick:'',birth:''}, bonuses:[], holdings:[], fx:32, recurring:[], fireRet:5, fire:{realYear:null},
+  accounts:[],
+  salary:0,
+  allocation:[   // 固定分類（不可刪除）：只能在底下新增子項目
+    {id:'c1',label:'必要開銷',locked:true,items:[]},
+    {id:'c2',label:'選擇消費',locked:true,items:[]},   // 選擇消費 = 娛樂、旅遊等選擇性開銷
+    {id:'c4',label:'投資理財',locked:true,items:[]},
+    {id:'c5',label:'未來基金',locked:true,items:[]}],
+  history:[], goals:[], wishlist:[], tx:[], archive:[]
+};
+
+/* ============ 自動計算 ============ */
+const sumBy=(a,f)=>a.reduce((s,x)=>s+f(x),0);
+const acctTotal=a=>a.demand+a.hy+a.fixed;           // 帳戶金額 = 子項目加總
+const catTotal=c=>sumBy(c.items,i=>i.amt);          // 分配金額 = 子項目加總
+const DEAD_RATE=1;          // 活存利率 <1% 視為死水資產
+const DEF_M=()=>({demand:{rate:0,exp:'',cap:0},hy:{rate:0,exp:'',cap:0},fixed:{rate:0,exp:'',cap:0}});
+const AT=[['demand','活存'],['hy','高利活存'],['fixed','定存']];
+function acctInfo(a){   // 年利率、單利、按日計息（實際天數 ÷ 365）、月補給息
+  const t=new Date(), dm=new Date(t.getFullYear(),t.getMonth()+1,0).getDate();
+  let interest=0,mInterest=0,dead=0,def=0,ef=0,mr=0;
+  AT.forEach(([k])=>{const v=a[k]||0,m=(a.m&&a.m[k])||{},r=m.rate||0,cap=m.cap||0,base=cap>0?Math.min(v,cap):v;
+    if(v>0&&r>0){interest+=base*r/100; mInterest+=base*r/100*dm/365;}
+    if(m.ef) ef+=v; if(v>0) mr=Math.max(mr,r);
+    if(k==='demand'&&r<DEAD_RATE) dead+=v; else def+=v;});
+  return {interest,mInterest,dead,def,ef,tag:mr>=1?'生息':'一般'};
+}
+function holdVals(h){   // 依交易紀錄重算股數與加權平均成本
+  let sh=0,cost=0,div=0;
+  [...h.trades].sort((a,b)=>a.date.localeCompare(b.date)).forEach(t=>{
+    if(t.type==='buy'){cost+=t.shares*t.price;sh+=t.shares;}
+    else if(t.type==='sell'){const avg=sh?cost/sh:0;cost-=avg*t.shares;sh-=t.shares;}
+    else div+=t.amt;});
+  const avg=sh>0?cost/sh:0, mv=sh*h.price;
+  return {sh,avg,mv,pl:mv-sh*avg,plPct:avg?(h.price/avg-1)*100:0,div};
+}
+function calcAssets(d){   // 投資 = 股票持股市值（美股 + 台股）
+  let demand=0,hy=0,td=0,dead=0,def=0,interest=0,mInterest=0,ef=0,us=0,tw=0;
+  d.accounts.forEach(a=>{demand+=a.demand;hy+=a.hy;td+=a.fixed;const i=acctInfo(a);dead+=i.dead;def+=i.def;interest+=i.interest;mInterest+=i.mInterest;ef+=i.ef;});
+  (d.holdings||[]).forEach(h=>{const v=holdVals(h).mv; if(h.cur==='USD') us+=v*(d.fx||32); else tw+=v;});
+  const cash=demand+hy, fixed=td, invest=us+tw;
+  return {demand,hy,td,cash,fixed,invest,us,tw,dead,def,interest,mInterest,ef,growth:invest,total:cash+fixed+invest};
+}
+const catOf=(d,label)=>catTotal(d.allocation.find(x=>x.label===label)||{items:[]});
+const bonusYear=d=>sumBy(d.bonuses||[],b=>b.amt);
+const bonusInto=(d,label)=>sumBy(d.bonuses||[],b=>sumBy((b.inj||[]).filter(i=>i.cat===label),i=>b.amt*(i.ratio||0)/100));   // 獎金淨注入某分類的金額（每年）
+function fundCalc(d,fund){   // 未來基金達成：月分配 + 獎金淨注入，複利試算
+  const contrib=catOf(d,'未來基金')+bonusInto(d,'未來基金')/12;
+  return {contrib,months:fund.target>0?simMonths(fund.saved,fund.target,contrib,d.fireRet==null?5:d.fireRet):null};
+}
+function simMonths(start,target,monthly,ret,maxM=1200){   // 複利試算：幾個月後達標（null = 100 年內達不到）
+  if(start>=target) return 0; let b=start; const r=ret/1200;
+  for(let i=1;i<=maxM;i++){ b=b*(1+r)+monthly; if(b>=target) return i; }
+  return null;
+}
+const addMonths=n=>{const t=new Date();return new Date(t.getFullYear(),t.getMonth()+n,1);};
+const fmtDur=n=>`${Math.floor(n/12)} 年 ${n%12} 個月`;
+const ageAt=(d,date)=>{const b=d.profile&&d.profile.birth; if(!b) return null; return Math.floor((date-new Date(b))/31557600000);};
+function fireCalc(d,c,o={}){   // 雙軌 FIRE：Lean（必要開銷）/ Real（含娛樂與旅遊）；目標 = 年支出 ÷ 4%
+  const ess0=catOf(d,'必要開銷'), ess=o.ess!=null?o.ess:ess0;
+  const real0=(d.fire&&d.fire.realYear!=null)?d.fire.realYear:(ess0+catOf(d,'選擇消費'))*12;
+  const leisure=o.leisure!=null?o.leisure:Math.max(0,(real0-ess0*12)/12), realYear=(ess+leisure)*12;
+  const monthly=o.monthly!=null?o.monthly:catOf(d,'投資理財')+catOf(d,'未來基金');
+  const by=o.by!=null?o.by:bonusInto(d,'投資理財')+bonusInto(d,'未來基金');
+  const ret=o.ret!=null?o.ret:(d.fireRet==null?5:d.fireRet);
+  const mk=yr=>{const target=yr/0.04;return {target,pct:target>0?c.total/target*100:0,months:target>0?simMonths(c.total,target,monthly+by/12,ret):null};};
+  const lean=mk(ess*12), real=mk(realYear);
+  return {ess,leisure,realYear,monthly,by,ret,lean,real,target:lean.target,pct:lean.pct,months:lean.months};
+}
+function diagHome(d,c,f){   // 規則式診斷（最多 5 點）
+  const out=[], tot=c.total||1, dp=c.dead/tot*100;
+  out.push(dp>25?`死水資產佔 ${dp.toFixed(0)}%（${fmt(c.dead)}）偏高：保留緊急預備金後，把多的錢轉進高利活存、定存或投資。`:`死水資產僅 ${dp.toFixed(0)}%，閒置資金控制得不錯。`);
+  const mo=f.ess>0?(c.ef>0?c.ef:c.demand+c.hy)/f.ess:null;
+  out.push(mo==null?'尚未設定「必要開銷」，無法評估緊急預備金；請到資產細節的月現金分配填入。':mo<3?`緊急預備金只夠 ${mo.toFixed(1)} 個月必要開銷，低於 3–6 個月安全線，先補足再加碼投資。`:mo>12?`緊急預備金高達 ${mo.toFixed(1)} 個月，超過 12 個月的部分可轉去投資。`:`緊急預備金約 ${mo.toFixed(1)} 個月，在安全範圍。`);
+  const ym=todayISO().slice(0,7), cur=d.tx.filter(t=>t.date.slice(0,7)===ym);
+  const inc=sumBy(cur.filter(t=>t.type==='income'),t=>t.amt), exp=sumBy(cur.filter(t=>t.type==='expense'),t=>t.amt);
+  out.push(inc>0?((inc-exp)/inc*100<20?`本月儲蓄率 ${((inc-exp)/inc*100).toFixed(0)}%（收入 ${fmt(inc)}、支出 ${fmt(exp)}），低於 20%，檢視最大的支出分類。`:`本月儲蓄率 ${((inc-exp)/inc*100).toFixed(0)}%，維持得很好。`):'本月還沒有收入記帳，無法計算儲蓄率。');
+  const gp=c.growth/tot*100;
+  out.push(gp<30?`成長型資產僅 ${gp.toFixed(0)}%，資產成長偏慢，可提高定期定額。`:`成長型資產佔 ${gp.toFixed(0)}%，配置積極；留意單一市場集中風險。`);
+  if(f.target<=0) out.push('設定必要開銷後才能計算 FIRE 目標。');
+  else if(f.months==null) out.push('以目前投入與報酬率，100 年內無法達成 FIRE，需提高每月投入或降低必要開銷。');
+  else if(f.months===0) out.push('已達到 FIRE 目標！');
+  else { const m2=simMonths(c.total,f.target,f.monthly+5000+f.by/12,f.ret); out.push(`FIRE 目標 ${fmt(f.target)}，已達成 ${f.pct.toFixed(1)}%；每月多投入 $5,000 約可提早 ${m2!=null&&f.months>m2?fmtDur(f.months-m2):'不到 1 個月'}。`); }
+  return out.slice(0,5);
+}
+function diagDetail(d,c,f){   // 每次畫面更新都依資產細節（現金分配、資產分類、帳戶、持股、獎金）重新產生，最多 5 點
+  const out=[], sal=d.salary||0, bal=sal-sumBy(d.allocation,catTotal), inv=catOf(d,'投資理財')+catOf(d,'未來基金'), tot=c.total||1;
+  out.push(sal<=0?'【現金流配置】先填入「固定支配」，才能檢視配置比例。':bal<0?`【現金流配置】每月分配超出固定支配 ${fmt(-bal)}，立刻刪減「選擇消費」或調降子項目。`:`【現金流配置】每月餘額 ${fmt(bal)}，立刻設定自動轉帳到投資理財／未來基金；兩者目前佔固定支配 ${(inv/sal*100).toFixed(0)}%（建議 ≥20%）。`);
+  const gp=c.growth/tot*100, dp=c.dead/tot*100, dfp=c.def/tot*100, us=c.invest>0?c.us/c.invest*100:0;
+  out.push(`【資產配置】成長型 ${gp.toFixed(0)}%、防禦型 ${dfp.toFixed(0)}%、死水 ${dp.toFixed(0)}%。`+(dp>25?'死水偏高，優先把活存多出的錢移到高利活存或定存。':gp<30?'成長型偏低，可用定期定額逐步提高到 30–50%。':'結構均衡，定期再平衡即可。')+(c.invest>0&&(us>80||us<20)?` 持股集中在單一市場（${Math.max(us,100-us).toFixed(0)}%），留意風險。`:''));
+  const rate=a=>Math.max(...AT.map(([k])=>(a.m&&a.m[k]&&a.m[k].rate)||0));
+  const best=[...d.accounts].sort((x,y)=>rate(y)-rate(x))[0];
+  const cand=[...d.accounts].map(a=>({a,v:(a.m&&a.m.demand&&a.m.demand.rate<DEAD_RATE&&!a.m.demand.ef)?a.demand:0})).sort((x,y)=>y.v-x.v)[0];
+  const keep=Math.max(0,f.ess*3-c.ef), mv=cand?Math.max(0,cand.v-keep):0;
+  out.push(cand&&best&&mv>0&&rate(best)>0?`【帳戶優化】${cand.a.name} 活存 ${fmt(cand.v)} 幾乎零利息，先保留 ${fmt(keep)}（補足 3 個月生活費），其餘 ${fmt(mv)} 轉到 ${best.name}（${rate(best)}%），每年約多 ${fmt(mv*rate(best)/100)}。`:c.ef<=0?'【帳戶優化】在銀行帳戶展開後勾選「緊急預備金」，建議才會精準指出哪些錢可以搬去更高利率的帳戶。':'【帳戶優化】活存配置合理；到各帳戶補上利率，就能比較哪個帳戶最划算。');
+  const soon=[], now=Date.now();
+  d.accounts.forEach(a=>AT.forEach(([k,l])=>{const e=a.m&&a.m[k]&&a.m[k].exp; if(e&&a[k]>0){const dd=(new Date(e.replace(/-/g,'/'))-now)/86400000; if(dd<=90&&dd>=-7) soon.push(`${a.name}${l}（${fmtDate(e)}）`);}}));
+  if(soon.length) out.push(`【帳戶優化】${soon.join('、')} 即將到期，現在就比較續存利率，避免轉成活存。`);
+  const bs=d.bonuses||[], nm=new Date().getMonth()+1;
+  out.push(bs.length?(()=>{const b=[...bs].sort((x,y)=>((x.month-nm+12)%12)-((y.month-nm+12)%12))[0],nj=b.inj||[];return `【不定期獎金】下一筆${b.name?`「${b.name}」`:''} ${b.month} 月 ${fmt(b.amt)}：`+(nj.length?`依你的設定注入 ${nj.map(i=>`${i.cat||'未選分類'} ${i.ratio||0}%`).join('、')}，其餘留作預備金或獎勵自己。`:`先補足緊急預備金，再將 ${fmt(b.amt*0.5)} 投入未來基金/投資、${fmt(b.amt*0.2)} 留給自己（可在獎金「編輯」設定注入比例）。`);})():'【不定期獎金】尚未設定；在現金分配的「不定期獎金」按編輯新增後，這裡會給出分配建議。');
+  return out.slice(0,5);
+}
+function applyInvest(p,v,date,upd){   // 記帳「投資」→ 記帳明細 + 持股買進 + 扣款帳戶
+  const fx=p.fx||32, total=v.total>0?v.total:(v.price*v.shares||0), amt=Math.round(v.cur==='USD'?total*fx:total);
+  const price=v.price>0?v.price:(v.shares>0?total/v.shares:0), shares=v.shares>0?v.shares:(price>0?total/price:0), key=v.ticker.trim().toUpperCase();
+  const t={id:uid(),date,type:'invest',cat:'投資',item:'買進 '+key,amt,note:v.note||`${key} ${v.cur} ${Math.round(total*100)/100}`};
+  let holdings=p.holdings||[];
+  if(shares>0){const tr={id:uid(),type:'buy',date,shares,price};
+    holdings=holdings.some(h=>h.ticker===key)?holdings.map(h=>h.ticker===key?{...h,price:price||h.price,trades:[...h.trades,tr]}:h):[...holdings,{id:uid(),ticker:key,name:key,cur:v.cur,price,trades:[tr]}];}
+  const accounts=upd&&v.acct?p.accounts.map(a=>a.id===v.acct?{...a,demand:Math.max(0,a.demand-amt)}:a):p.accounts;
+  return {...p,tx:[...p.tx,t],holdings,accounts};
+}
+// 每月最後一天開啟 App：自動記錄當月資產（當天重複開啟會更新為最新數字）
+function snapMonthEnd(p){
+  const t=new Date(); if(t.getFullYear()!==YEAR) return p;
+  const m=t.getMonth()+1; if(t.getDate()!==new Date(YEAR,m,0).getDate()) return p;
+  const c=calcAssets(p), old=p.history.find(x=>x.m===m);
+  if(old&&old.total===c.total&&old.cash===c.cash&&old.fixed===c.fixed&&old.invest===c.invest) return p;
+  const r={m,total:c.total,cash:c.cash,fixed:c.fixed,invest:c.invest};
+  return {...p,history:[...p.history.filter(x=>x.m!==m),r].sort((a,b)=>a.m-b.m)};
+}
+
+/* ============ 日期 / 月結 / 資料升級 ============ */
+const pad=n=>String(n).padStart(2,'0');
+const todayISO=()=>{const t=new Date();return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;};
+const fmtDate=iso=>String(iso||'').replace(/-/g,'/');   // 統一「年/月/日」
+// 每月結束後（進入新月份時）：把舊月份的收支整理成「N月收支紀錄」，並清除明細
+function archiveOldMonths(p){
+  const now=todayISO().slice(0,7), old=p.tx.filter(t=>t.date.slice(0,7)<now);
+  if(!old.length) return p;
+  const g={}; old.forEach(t=>{const k=t.date.slice(0,7);(g[k]=g[k]||[]).push(t);});
+  let arch=[...p.archive];
+  Object.entries(g).forEach(([ym,list])=>{
+    const ex=arch.find(a=>a.ym===ym)||{ym,income:0,expense:0,inc:{},exp:{}};
+    const n={ym,income:ex.income,expense:ex.expense,invest:ex.invest||0,inc:{...ex.inc},exp:{...ex.exp},tx:[...(ex.tx||[])]};
+    list.forEach(t=>{if(t.type==='invest') n.invest+=t.amt; else {const o=t.type==='income'?n.inc:n.exp;o[t.cat]=(o[t.cat]||0)+t.amt;if(t.type==='income')n.income+=t.amt;else n.expense+=t.amt;} n.tx.push(t);});
+    arch=[...arch.filter(a=>a.ym!==ym),n];
+  });
+  return {...p,tx:p.tx.filter(t=>t.date.slice(0,7)>=now),archive:arch.sort((a,b)=>b.ym.localeCompare(a.ym))};
+}
+const LOCKED=['必要開銷','選擇消費','投資理財','未來基金'];   // 固定分類：不可刪除，只能新增子項目
+function ensureAlloc(st){
+  const al=st.allocation.map(c=>LOCKED.includes(c.label)?{...c,locked:true}:c);
+  LOCKED.forEach(n=>{ if(!al.some(c=>c.label===n)) al.push({id:uid(),label:n,locked:true,items:[]}); });
+  const n={...st,salary:st.salary==null?0:st.salary,allocation:al,accounts:st.accounts.map(a=>{const m=a.m||DEF_M(),m2={};Object.keys(m).forEach(k=>{const e=m[k].exp;m2[k]={...m[k],exp:e&&e.length===7?`${e}-${pad(new Date(+e.slice(0,4),+e.slice(5),0).getDate())}`:e};});return {...a,m:m2};}),profile:st.profile||{nick:'',birth:''},bonuses:(st.bonuses||[]).map(b=>{const nb={name:'',...b};if(!nb.inj)nb.inj=nb.cat?[{id:uid(),cat:nb.cat,ratio:nb.ratio||0}]:[];delete nb.cat;delete nb.ratio;return nb;}),holdings:st.holdings||[],fx:st.fx||32,recurring:st.recurring||[],fireRet:(st.fireRet==null||st.fireRet===6)?5:st.fireRet,fire:st.fire||{realYear:null},tx:(st.tx||[]).map(t=>t.cat==='投資'&&t.type==='expense'?{...t,type:'invest'}:t)};
+  return JSON.stringify(n)===JSON.stringify(st)?st:n;
+}
+function summarize(tx){
+  const inc={},exp={}; let income=0,expense=0,invest=0;
+  tx.forEach(t=>{ if(t.type==='invest'){invest+=t.amt;return;} const o=t.type==='income'?inc:exp;o[t.cat]=(o[t.cat]||0)+t.amt;if(t.type==='income')income+=t.amt;else expense+=t.amt;});
+  return {income,expense,invest,inc,exp};
+}
+function migrate(st){   // 舊版雲端資料 → 新格式（保留你的資料）
+  if(st.schema===4) return ensureAlloc(st);
+  if(st.schema===3) return ensureAlloc({...st,schema:4,archive:[],tx:st.tx.map(t=>{const [m,dd]=String(t.date).split('/');return {...t,date:`${YEAR}-${pad(m)}-${pad(dd)}`};})});
+  return null;
+}
+
+/* ============ 共用元件 ============ */
+// 單行顯示；放不下時自動縮小字體（不換行）
+function Fit({children,className='',style}) {
+  const w=useRef(null), i=useRef(null);
+  useLayoutEffect(()=>{
+    const a=w.current,b=i.current; if(!a||!b) return;
+    b.style.transform='none';
+    const s=Math.min(1,a.clientWidth/b.offsetWidth);
+    if(s<1) b.style.transform=`scale(${Math.max(s,.3)})`;
+  });
+  return <div ref={w} className={`overflow-hidden whitespace-nowrap ${className}`}><span ref={i} className="inline-block origin-left" style={style}>{children}</span></div>;
+}
+const Chev=({open})=>(<svg width="20" height="20" viewBox="0 0 20 20" className="opacity-50 shrink-0 transition-transform" style={{transform:`rotate(${open?90:0}deg)`}}><path d="M7.5 4.5L13 10l-5.5 5.5" fill="none" stroke="#000" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>);
+const Card=({className='',children,...p})=><div className={`bg-white rounded-lg border border-neutral-200 ${className}`} {...p}>{children}</div>;
+const addCommas=t=>{const [i,dd]=t.split('.');return i.replace(/\B(?=(\d{3})+(?!\d))/g,',')+(dd!==undefined?'.'+dd:'');};
+let OPEN_CALC=()=>{};
+const CalcCtx=React.createContext(false);   // true = 使用 App 內建計算機（只有未來目標頁）；其餘頁面為一般數字鍵盤
+function NumBox({value,onChange,className='w-32 h-9 px-3 text-sm',autoFocus,dec}) {
+  const calc=useContext(CalcCtx);
+  const [s,setS]=useState(String(value));
+  useEffect(()=>{ if(Number(s||0)!==value) setS(String(value)); },[value]);
+  if(calc) return <input readOnly inputMode="none" value={addCommas(String(value))} onClick={()=>OPEN_CALC({value,onChange})} className={`rounded-lg border border-neutral-200 text-right bg-white min-w-0 cursor-pointer ${className}`}/>;
+  return <input value={addCommas(s)} inputMode="decimal" autoFocus={autoFocus} onChange={e=>{let v=e.target.value.replace(/[^\d.]/g,'').replace(/^0+(?=\d)/,''); if(dec!=null&&v.includes('.')){const [ip,fp]=v.split('.');v=ip+'.'+fp.slice(0,dec);} setS(v);onChange(Number(v)||0);}} className={`rounded-lg border border-neutral-200 text-right bg-white min-w-0 ${className}`}/>;
+}
+const Num=({label,value,onChange,dec})=>(<label className="flex items-center justify-between gap-3 py-1.5 text-sm"><span className="flex-1 min-w-0 truncate">{label}</span><NumBox value={value} onChange={onChange} dec={dec}/></label>);
+const Txt=({value,onChange,ph,className=''})=><input value={value} placeholder={ph} onChange={e=>onChange(e.target.value)} className={`h-9 rounded-lg border border-neutral-200 px-3 text-sm bg-white min-w-0 ${className}`}/>;
+const Btn=({onClick,danger,gray,red,children})=><button onClick={onClick} className={`px-3 h-8 rounded-lg border text-xs font-medium shrink-0 ${red?'bg-red-500 border-red-500 text-white':gray?'bg-neutral-200 border-neutral-200':'bg-white border-neutral-200'} ${danger&&!red?'text-red-600':''}`}>{children}</button>;
+const Row=({l,v})=><div className="flex items-center justify-between py-1.5 text-sm"><span>{l}</span><span className="text-zinc-600">{fmt(v)}</span></div>;
+function Sheet({title,onClose,children}) {
+  return (<div className="fixed inset-0 z-40 bg-black/30 flex items-end justify-center px-3" style={{paddingBottom:'calc(38px + env(safe-area-inset-bottom,0px))'}} onClick={onClose}>
+    <div className="bg-white w-full max-w-[393px] max-h-[75vh] overflow-y-auto rounded-2xl p-5" onClick={e=>e.stopPropagation()}>
+      <div className="flex items-center justify-between mb-3"><div className="text-base font-semibold">{title}</div><button onClick={onClose} className="text-sm text-zinc-500">關閉</button></div>
+      {children}
+    </div></div>);
+}
+const Pill=({on,onClick,children,color,tc='#000',full})=><button onClick={onClick} className={`py-1.5 rounded-[20px] text-sm font-medium ${full?'flex-1 min-w-0 px-2':'px-3.5'} ${on?'bg-black text-white':'bg-neutral-100'}`} style={on&&color?{background:color,color:tc}:undefined}>{full?<Fit className="text-center">{children}</Fit>:children}</button>;
+const SaveBtn=({onClick,disabled,children='儲存'})=><button disabled={disabled} onClick={onClick} className="h-11 rounded-lg bg-black text-white text-sm font-medium disabled:opacity-30 w-full">{children}</button>;
+
+/* ============ 計算機鍵盤 / FIRE / AI ============ */
+function CalcPad({cfg,onClose}) {
+  const [ex,setEx]=useState(cfg.value?String(cfg.value):'');
+  const ev=e=>{const q=e.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-'); if(!q||!/^[\d+\-*/().\s]+$/.test(q)) return null; try{const r=Function('"use strict";return ('+q+')')(); return isFinite(r)?Math.round(r*100)/100:null;}catch(x){return null;}};
+  const press=k=>{ if(k==='C') setEx(''); else if(k==='⌫') setEx(e=>e.slice(0,-1)); else if(k==='=') {const r=ev(ex); if(r!=null) setEx(String(r));} else setEx(e=>e+k); };
+  const done=()=>{ if(!ex.trim()){cfg.onChange(0);onClose();return;} const r=ev(ex); if(r!=null){cfg.onChange(Math.max(0,r));onClose();} };
+  const keys=['C','⌫','÷','×','7','8','9','−','4','5','6','+','1','2','3','=','0','.','00'];
+  const hasOp=/[+\-−×÷]/.test(ex.slice(1)), pv=hasOp?ev(ex):null;
+  return (<div className="fixed inset-0 z-[60] bg-black/30 flex items-end justify-center px-3" style={{paddingBottom:'calc(38px + env(safe-area-inset-bottom,0px))'}} onClick={onClose}>
+    <div className="bg-white w-full max-w-[393px] rounded-2xl p-4" onClick={e=>e.stopPropagation()}>
+      <div className="text-right text-2xl font-semibold h-9 overflow-hidden">{ex?ex.replace(/\d+(\.\d+)?/g,m=>addCommas(m)):'0'}</div>
+      <div className="text-right text-xs text-zinc-400 h-5">{pv!=null?'= '+addCommas(String(pv)):''}</div>
+      <div className="grid grid-cols-4 gap-2 mt-2">
+        {keys.map(k=><button key={k} onClick={()=>press(k)} className={`h-12 rounded-lg text-lg font-medium ${/[÷×−+=]/.test(k)?'bg-neutral-200':'bg-neutral-100'}`}>{k}</button>)}
+        <button onClick={done} className="h-12 rounded-lg text-sm font-semibold bg-black text-white">完成</button>
+      </div>
+    </div></div>);
+}
+const Bar=({pct,color='bg-green-500'})=><div className="h-2 rounded-full bg-neutral-100 mt-2.5 overflow-hidden"><div className={`h-full ${color}`} style={{width:Math.min(100,pct)+'%'}}/></div>;
+function FireCard({d,c,onClick}) {
+  const f=fireCalc(d,c);
+  const row=(name,sub,t,color)=>{ let tx;
+    if(t.target<=0) tx='尚未設定'; else if(t.months==null) tx='無法達成'; else if(t.months===0) tx='已達成';
+    else {const dt=addMonths(t.months),age=ageAt(d,dt); tx=`預計 ${dt.getFullYear()} 年${age!=null?`（${age}歲）`:''}`;}
+    return (<div className="mt-6"><div className="flex items-baseline justify-between gap-2"><Fit className="flex-1 min-w-0 text-base font-semibold leading-8">{name}<span className="font-normal text-zinc-400">{sub}</span></Fit><Fit className="text-sm text-zinc-500 leading-8 max-w-[40%]">目標 {fmt(t.target)}</Fit></div>
+      <Fit className="text-lg font-semibold leading-9 mt-1.5">達成率 {t.pct.toFixed(2)}%｜{tx}</Fit><Bar pct={t.pct} color={color}/></div>); };
+  return (<Card className="p-4 cursor-pointer" onClick={onClick}><div className="text-sm font-semibold">FIRE 倒數計時</div>
+    {row('Lean FIRE ','(僅必要開銷)',f.lean,'bg-green-500')}{row('Real FIRE ','',f.real,'bg-blue-500')}
+    <div className="text-[10px] text-zinc-400 mt-2">點按卡片可設定年支出與年化報酬率（目前 {f.ret}%）</div></Card>);
+}
+function FundCard({d,fund}) {
+  const fc=fundCalc(d,fund);
+  const msg=fund.target<=0?'尚未設定目標':fc.months==null?'依目前月分配無法達成':fc.months===0?'已達成':(()=>{const dt=addMonths(fc.months);return `預計 ${dt.getFullYear()}/${pad(dt.getMonth()+1)} 達成（距離現在還有 ${fmtDur(fc.months)}）`;})();
+  return (<Card className="p-4"><div className="flex items-baseline justify-between gap-2"><span className="text-sm font-semibold">未來基金</span><Fit className="text-xs text-zinc-500 max-w-[55%]">目標 {fmt(fund.target)}</Fit></div>
+    <Fit className="text-sm font-semibold mt-2">達成率 {fund.rate.toFixed(2)}%｜已準備 {fmt(fund.saved)}</Fit><Bar pct={fund.rate} color="bg-amber-500"/>
+    <div className="text-xs text-zinc-600 mt-2 whitespace-normal leading-5">{msg}</div></Card>);
+}
+function AiCard({title,items}) {
+  return (<Card className="p-4"><div className="text-sm font-semibold">{title}</div>
+    <div className="text-[10px] text-zinc-400 mb-1">依你的資產與記帳資料，以規則自動分析</div>
+    {items.map((t,i)=><div key={i} className="flex gap-2 py-1 text-xs leading-5 whitespace-normal"><span className="text-zinc-400">{i+1}.</span><span>{t}</span></div>)}</Card>);
+}
+
+/* ============ 頁 1：我的資產 ============ */
+function RecSheet({d,setD,onClose}) {
+  const hs=[...d.history].sort((a,b)=>a.m-b.m);
+  const mk=(m,cc)=>({m,total:cc.total,cash:cc.cash,fixed:cc.fixed,invest:cc.invest});
+  const put=(p,r)=>({...p,history:[...p.history.filter(x=>x.m!==r.m),r].sort((a,b)=>a.m-b.m)});
+  const setR=(m,f,v)=>setD(p=>({...p,history:p.history.map(r=>{if(r.m!==m)return r;const n={...r,[f]:v};n.total=n.cash+n.fixed+n.invest;return n;})}));
+  const delR=m=>{ if(confirm(m+' 月的紀錄要刪除嗎？')) setD(p=>({...p,history:p.history.filter(r=>r.m!==m)})); };
+  const now=()=>setD(p=>put(p,mk(new Date().getMonth()+1,calcAssets(p))));
+  const add=()=>setD(p=>{const m=[1,2,3,4,5,6,7,8,9,10,11,12].find(i=>!p.history.some(x=>x.m===i));return m?put(p,mk(m,calcAssets(p))):p;});
+  return (<Sheet title={YEAR+' 資產紀錄'} onClose={onClose}>
+    <div className="text-xs text-zinc-500 leading-5 whitespace-normal mb-2">每月最後一天開啟 App 會自動記錄。漏記的月份可「新增月份」補上並修改數字。</div>
+    <div className="flex gap-2 mb-2"><Btn onClick={now}>記錄本月</Btn><Btn onClick={add}>新增月份</Btn></div>
+    {!hs.length&&<div className="text-xs text-zinc-400 py-3">尚無紀錄</div>}
+    {hs.map(r=>(<div key={r.m} className="py-2 border-b-[0.5px] border-neutral-200">
+      <div className="flex items-center justify-between"><span className="text-sm font-medium">{r.m} 月　總資產 {fmt(r.total)}</span><Btn danger onClick={()=>delR(r.m)}>刪除</Btn></div>
+      <Num label="現金" value={r.cash} onChange={v=>setR(r.m,'cash',v)}/>
+      <Num label="定存" value={r.fixed} onChange={v=>setR(r.m,'fixed',v)}/>
+      <Num label="投資" value={r.invest} onChange={v=>setR(r.m,'invest',v)}/>
+    </div>))}
+  </Sheet>);
+}
+function PageMy({d,setD,fund,c,mom}) {
+  const [rec,setRec]=useState(false), [tip,setTip]=useState(null), [sheet,setSheet]=useState(null);
+  const pct=v=>c.total>0?(v/c.total*100).toFixed(1)+'%':'—', f=fireCalc(d,c);
+  const cards=[['總資產',fmt(c.total),null,'較上月 '+fmtPct(mom.total),null],
+    ['現金',fmt(c.cash),pct(c.cash),fmtPct(mom.cash),'cash'],
+    ['定存',fmt(c.fixed),pct(c.fixed),fmtPct(mom.fixed),'fixed'],
+    ['投資',fmt(c.invest),pct(c.invest),fmtPct(mom.invest),'invest']];
+  const nowM=new Date().getMonth()+1;
+  const live=(YEAR===new Date().getFullYear()&&!d.history.some(r=>r.m===nowM))?[{m:nowM,total:c.total,cash:c.cash,fixed:c.fixed,invest:c.invest,live:true}]:[];
+  const hs=[...d.history,...live].sort((a,b)=>a.m-b.m);   // 本月尚未月結時，以即時數字補上本月資料點
+  const vals=hs.flatMap(r=>[r.total,r.cash,r.fixed,r.invest]);   // Y 軸依資料最高/最低值自動縮放
+  const dmin=vals.length?Math.min(...vals):0, dmax=Math.max(...vals,dmin*1.05+1,vals.every(v=>v===0)?500000:0);
+  let step=1,lo=0;
+  outer: for(let k=-3;k<12;k++) for(const mu of [1,2,5]){const st=mu*Math.pow(10,k),l=Math.floor(dmin/st)*st; if(l+5*st>=dmax){step=st;lo=l;break outer;}}
+  const x=m=>48+(m-1)*(288/11), y=v=>240-(v-lo)/(step*5)*180;
+  const LINES=[['total','總資產','#2563eb'],['cash','現金','#22c55e'],['fixed','定存','#f59e0b'],['invest','投資','#a855f7']];
+  const path=k=>hs.map((r,i)=>(i?'L':'M')+x(r.m).toFixed(1)+' '+y(r[k]).toFixed(1)).join(' ');
+  const area=hs.length>1?`${path('total')} L${x(hs[hs.length-1].m).toFixed(1)} 240 L${x(hs[0].m).toFixed(1)} 240 Z`:'';
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return (<div className="pt-[17px] flex flex-col gap-4">
+    <div className="flex gap-3 overflow-x-auto no-sb pl-4 snap-x scroll-pl-4">
+      {cards.map((cd,i)=>(
+        <Card key={i} onClick={()=>cd[4]&&setSheet(cd[4])} className={`w-[calc((100%-28px)/2)] h-28 p-4 shrink-0 grow-0 snap-start flex flex-col justify-center gap-1.5 ${cd[4]?'cursor-pointer active:bg-neutral-50':''}`}>
+          <div className="text-sm font-semibold leading-5">{cd[0]}</div>
+          <Fit className="text-xl font-semibold leading-7">{cd[1]}</Fit>
+          {cd[2]? <Fit className="text-xs font-semibold leading-4"><span className="text-zinc-500">{cd[2]}</span>{'   '}{cd[3]}</Fit>
+                : <Fit className="text-xs font-medium text-zinc-500 leading-4">{cd[3]}</Fit>}
+        </Card>))}
+      <div className="shrink-0 w-1"/>
+    </div>
+    <div className="px-4 flex flex-col gap-4">
+    <FireCard d={d} c={c} onClick={()=>setSheet('fire')}/>
+    <FundCard d={d} fund={fund}/>
+    <Card className="relative overflow-hidden" style={{height:288}}>
+      <button onClick={()=>setRec(true)} className="absolute right-3 top-3 px-3 h-7 rounded-lg border border-neutral-200 bg-white text-xs font-medium">管理紀錄</button>
+      <svg viewBox="0 0 361 288" width="100%" height="288" fontFamily="Inter" onClick={()=>setTip(null)}>
+        <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2563eb" stopOpacity=".15"/><stop offset="1" stopColor="#2563eb" stopOpacity="0"/></linearGradient></defs>
+        <text x="16" y="29" fontSize="14" fontWeight="600">{YEAR}資產變化</text>
+        {LINES.map(([k,l,col],i)=><g key={k} transform={`translate(${16+i*58},46)`}><circle cx="4" cy="0" r="4" fill={col}/><text x="12" y="3.5" fontSize="10" fill="#52525b">{l}</text></g>)}
+        {live.length>0&&<text x="262" y="49" fontSize="9" fill="#a1a1aa">○ 本月即時</text>}
+        {[60,96,132,168,204,240].map((gy,i)=><line key={gy} x1="48" x2="336" y1={gy} y2={gy} stroke="#e5e5e5" strokeOpacity={i===5?1:.5}/>)}
+        {[0,1,2,3,4,5].map(k=><text key={k} x="42" y={243-k*36} fontSize="10" fill="#71717a" textAnchor="end">{fmtK(lo+k*step)}</text>)}
+        {months.map((m,i)=><text key={m} x={x(i+1)} y="254" fontSize="10" fill="#71717a" textAnchor="middle">{m}</text>)}
+        {area&&<path d={area} fill="url(#g)"/>}
+        {hs.length>1&&LINES.map(([k,,col])=><path key={k} d={path(k)} fill="none" stroke={col} strokeWidth={k==='total'?3:2} strokeLinejoin="round" strokeLinecap="round"/>)}
+        {hs.map(r=>LINES.map(([k,l,col])=><g key={r.m+k} style={{cursor:'pointer'}} onMouseEnter={()=>setTip({m:r.m,l,v:r[k]})} onClick={e=>{e.stopPropagation();setTip({m:r.m,l,v:r[k]});}}><circle cx={x(r.m)} cy={y(r[k])} r="9" fill="transparent"/><circle cx={x(r.m)} cy={y(r[k])} r={k==='total'?3.5:3} fill={r.live?'#fff':col} stroke={col} strokeWidth="1.5"/></g>))}
+        {tip&&(()=>{const tx=x(tip.m),ty=y(tip.v),w=150,bx=Math.min(Math.max(tx-w/2,4),357-w);return <g pointerEvents="none"><rect x={bx} y={ty-38} width={w} height="26" rx="6" fill="#18181b" opacity=".92"/><text x={bx+w/2} y={ty-21} fontSize="11" fill="#fff" textAnchor="middle">{`${tip.m}月 ${tip.l} ${fmt(tip.v)}`}</text></g>;})()}
+      </svg>
+    </Card>
+    <AiCard title="AI 智慧診斷" items={diagHome(d,c,f)}/>
+    <div style={{height:'calc(60px + env(safe-area-inset-bottom,0px))'}}/>
+    </div>
+    {rec&&<RecSheet d={d} setD={setD} onClose={()=>setRec(false)}/>}
+    {sheet==='cash'&&<Sheet title="現金明細" onClose={()=>setSheet(null)}>
+      <div className="text-xs text-zinc-500 mb-2">現金 = 活存 + 高利活存　合計 {fmt(c.cash)}</div>
+      {d.accounts.map(x=>(<div key={x.id} className="mt-3"><div className="text-sm font-semibold">{x.name}</div><Row l="現金（活存）" v={x.demand}/><Row l="高利活存" v={x.hy}/></div>))}
+    </Sheet>}
+    {sheet==='fixed'&&<Sheet title="定存明細" onClose={()=>setSheet(null)}>
+      <div className="text-xs text-zinc-500 mb-2">定存合計 {fmt(c.fixed)}</div>
+      {d.accounts.map(x=><Row key={x.id} l={x.name+'　定存'} v={x.fixed}/>)}
+    </Sheet>}
+    {sheet==='invest'&&<Sheet title="投資明細" onClose={()=>setSheet(null)}>
+      <div className="text-xs text-zinc-500 mb-2">投資 = 美股 + 台股（來自資產細節的股票持股）　合計 {fmt(c.invest)}</div>
+      {[['美股','USD',c.us],['台股','TWD',c.tw]].map(([t,cur,sum])=>{const hs2=d.holdings.filter(h=>h.cur===cur);return (<div key={t} className="mt-3">
+        <div className="flex justify-between text-sm font-semibold"><span>{t}</span><span>{fmt(sum)}</span></div>
+        {hs2.map(h=>{const v=holdVals(h),mv=v.mv*(cur==='USD'?(d.fx||32):1);return (<div key={h.id} className="flex justify-between gap-2 text-xs py-1.5 border-b-[0.5px] border-neutral-200"><span>{h.ticker}　{Math.round(v.sh*1000)/1000} 股</span><span>{fmt(mv)}　<span className={v.pl>=0?'text-green-700':'text-red-600'}>{v.pl>=0?'+':''}{v.plPct.toFixed(1)}%</span></span></div>);})}
+        {!hs2.length&&<div className="text-xs text-zinc-400 py-1.5">尚無持股</div>}</div>);})}
+    </Sheet>}
+    {sheet==='fire'&&<Sheet title="FIRE 設定" onClose={()=>setSheet(null)}>
+      <div className="text-xs text-zinc-500 whitespace-normal leading-5 mb-2">FIRE 目標 = 年支出 ÷ 4%。Lean 只算必要開銷；Real 含選擇消費（娛樂、旅遊等），可在這裡手動設定年支出。</div>
+      <Row l="Lean 年支出（必要開銷 × 12）" v={f.ess*12}/>
+      <Num label="Real 年支出" value={Math.round(f.realYear)} onChange={v=>setD(p=>({...p,fire:{...(p.fire||{}),realYear:v}}))}/>
+      <Num label="預估年化報酬率 %" value={d.fireRet==null?5:d.fireRet} onChange={v=>setD(p=>({...p,fireRet:v}))}/>
+      <div className="mt-2"><Btn onClick={()=>setD(p=>({...p,fire:{realYear:null}}))}>Real 年支出還原預設</Btn></div>
+    </Sheet>}
+  </div>);
+}
+
+/* ============ 頁 2：資產細節 ============ */
+const Acc=({title,sub,right,open,onToggle,children})=>(
+  <Card className="mx-4 mt-6 overflow-hidden">
+    <div className="px-4 h-14 flex items-center gap-2 cursor-pointer" onClick={onToggle}>
+      <div className="flex-1 min-w-0"><div className="text-sm font-semibold leading-5">{title}</div>{sub&&<Fit className="text-[11px] text-zinc-500">{sub}</Fit>}</div>
+      {right}<Chev open={open}/></div>
+    {open&&<div className="px-4 pb-4">{children}</div>}
+  </Card>);
+const fmtC=(n,cur)=>cur==='USD'?(HIDE?'••••':'US$'+Math.round(n*100/100).toLocaleString('en-US',{maximumFractionDigits:2})):fmt(n);
+function StockForm({kind,onSave,onClose}) {
+  const isNew=kind==='new';
+  const [ticker,setTicker]=useState(''), [cur,setCur]=useState('TWD'), [shares,setShares]=useState(0), [price,setPrice]=useState(0), [cost,setCost]=useState(0), [amt,setAmt]=useState(0), [date,setDate]=useState(todayISO()), [type,setType]=useState(isNew?'buy':kind);
+  const ok=isNew?(ticker.trim()&&shares>0&&cost>0):type==='div'?amt>0:(shares>0&&price>0);
+  const L=(t,ch)=><div><div className="text-xs text-zinc-500 mb-1">{t}</div>{ch}</div>;
+  const nb="w-full h-10 px-3 text-sm text-left";
+  return (<Sheet title={isNew?'新增持股':'新增交易'} onClose={onClose}><div className="flex flex-col gap-3">
+    {isNew?<>
+      {L('股票代碼 / 名稱',<Txt value={ticker} onChange={setTicker} ph="例如 0050、AAPL" className="h-10 w-full"/>)}
+      {L('幣別',<select value={cur} onChange={e=>setCur(e.target.value)} className="h-10 w-full rounded-lg border border-neutral-200 px-3 text-sm bg-white"><option>TWD</option><option>USD</option></select>)}
+      {L('持有股數',<NumBox value={shares} onChange={setShares} className={nb}/>)}
+      {L('平均買入成本',<NumBox value={cost} onChange={setCost} className={nb}/>)}
+      {L('現價',<NumBox value={price} onChange={setPrice} className={nb}/>)}
+    </>:<>
+      <div className="flex gap-2">{[['buy','買進'],['sell','賣出'],['div','股息']].map(([k,l])=><Pill key={k} on={type===k} onClick={()=>setType(k)}>{l}</Pill>)}</div>
+      {L('日期',<DateBox value={date} onChange={setDate}/>)}
+      {type==='div'?L('股息金額',<NumBox value={amt} onChange={setAmt} className={nb}/>):<>{L('股數',<NumBox value={shares} onChange={setShares} className={nb}/>)}{L('成交價',<NumBox value={price} onChange={setPrice} className={nb}/>)}</>}
+    </>}
+    <SaveBtn disabled={!ok} onClick={()=>{onSave(isNew?{ticker:ticker.trim().toUpperCase(),cur,shares,cost,price:price||cost}:{type,date,shares,price,amt});onClose();}}/>
+  </div></Sheet>);
+}
+function DateBox({value,onChange,className='h-10 w-full px-3 text-sm',clearable}) {   // 點擊跳出日期選擇器，顯示成 2027/03/27
+  return (<div className={`relative rounded-lg border border-neutral-200 bg-white flex items-center justify-center ${className}`}>
+    <span>{value?value.replace(/-/g,'/'):''}</span>
+    <input type="date" value={value||''} onChange={e=>onChange(e.target.value)} onClick={e=>{try{e.currentTarget.showPicker&&e.currentTarget.showPicker();}catch(x){}}} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"/>
+    {clearable&&value&&<button onClick={e=>{e.stopPropagation();onChange('');}} aria-label="清除" className="absolute right-1.5 z-10 text-xs text-zinc-400">✕</button>}
+  </div>);
+}
+function MonthBox({value,onChange}) {   // 到期日：2026/10
+  const disp=v=>(v||'').replace('-','/');
+  const [t,setT]=useState(disp(value));
+  useEffect(()=>{setT(disp(value));},[value]);
+  return <input value={t} inputMode="numeric" onChange={e=>{const dg=e.target.value.replace(/\D/g,'').slice(0,6),o=dg.length>4?dg.slice(0,4)+'/'+dg.slice(4):dg;setT(o);if(dg.length===6)onChange(dg.slice(0,4)+'-'+dg.slice(4));else if(!dg.length)onChange('');}} className="w-32 h-9 px-3 text-sm text-right rounded-lg border border-neutral-200 bg-white"/>;
+}
+function FireSim({d,c}) {
+  const base=fireCalc(d,c);
+  const init=()=>({monthly:Math.round(base.monthly),ret:base.ret,by:Math.round(base.by),ess:Math.round(base.ess),leisure:Math.round(base.leisure)});
+  const [sim,setSim]=useState(init);
+  const f=fireCalc(d,c,sim);
+  const out=(name,t,bt)=>{ let res='—',cmp='';
+    if(t.target<=0) res='未設定'; else if(t.months==null) res='無法達成'; else if(t.months===0) res='已達成';
+    else {const dt=addMonths(t.months),age=ageAt(d,dt);res=`${dt.getFullYear()} 年${age!=null?`（${age}歲）`:''}`;}
+    if(t.months!=null&&bt.months!=null){const df=bt.months-t.months;cmp=df>0?`比現在提早 ${fmtDur(df)}`:df<0?`比現在延後 ${fmtDur(-df)}`:'與現在相同';} else if(t.months!=null&&bt.months==null) cmp='比現在可行';
+    return (<div className="flex-1 min-w-0 text-center"><div className="text-xs text-zinc-500">{name}</div><Fit className="text-xl font-semibold leading-8">{res}</Fit>
+      <Fit className={`text-xs font-semibold ${cmp.includes('提早')||cmp.includes('可行')?'text-green-600':cmp.includes('延後')?'text-red-500':'text-zinc-500'}`}>{cmp||'\u00A0'}</Fit></div>); };
+  const Sl=(label,k,max,st,show)=>(<div className="mt-3"><div className="flex justify-between text-xs"><span className="text-zinc-500">{label}</span><span className="font-semibold">{show}</span></div>
+    <input type="range" min="0" max={max} step={st} value={sim[k]} onChange={e=>setSim(o=>({...o,[k]:Number(e.target.value)}))} className="w-full"/></div>);
+  return (<Card className="mx-4 mt-6 p-4"><div className="flex items-center justify-between"><div className="text-sm font-semibold">FIRE 模擬器</div><Btn onClick={()=>setSim(init())}>重設</Btn></div>
+    <div className="mt-3 flex gap-3">{out('Lean FIRE 預期退休',f.lean,base.lean)}{out('Real FIRE 預期退休',f.real,base.real)}</div>
+    {Sl('每月投入金額','monthly',Math.max(200000,Math.round(base.monthly*3)),1000,fmt(sim.monthly))}
+    {Sl('預估年化報酬率','ret',15,0.5,sim.ret+'%')}
+    {Sl('每年固定獎金注入','by',1000000,10000,fmt(sim.by))}
+    {Sl('必要開銷（每月）','ess',Math.max(100000,Math.round(base.ess*3)),1000,fmt(sim.ess))}
+    {Sl('選擇消費（每月）','leisure',Math.max(100000,Math.round(base.leisure*3)),1000,fmt(sim.leisure))}
+  </Card>);
+}
+function PageDetail({d,setD,c}) {
+  const [open,setOpen]=useState({}), [sec,setSec]=useState({ai:true}), [stForm,setStForm]=useState(null), [pie,setPie]=useState(null), [bEdit,setBEdit]=useState(false), [salEdit,setSalEdit]=useState(false);
+  const tog=k=>setOpen(o=>({...o,[k]:!o[k]})), tsec=k=>setSec(o=>({...o,[k]:!o[k]}));
+  const setAcc=(id,patch)=>setD(p=>({...p,accounts:p.accounts.map(a=>a.id===id?{...a,...patch}:a)}));
+  const setM=(id,k,patch)=>setD(p=>({...p,accounts:p.accounts.map(a=>a.id===id?{...a,m:{...a.m,[k]:{...a.m[k],...patch}}}:a)}));
+  const delAcc=a=>{ if(confirm('刪除帳戶「'+a.name+'」？')) setD(p=>({...p,accounts:p.accounts.filter(x=>x.id!==a.id)})); };
+  const addAcc=e=>{ e.stopPropagation(); const id=uid(); setD(p=>({...p,accounts:[...p.accounts,{id,name:'新帳戶',demand:0,hy:0,fixed:0,m:DEF_M()}]})); setOpen(o=>({...o,[id]:true})); setSec(o=>({...o,bank:true})); };
+  const setCat=(id,patch)=>setD(p=>({...p,allocation:p.allocation.map(x=>x.id===id?{...x,...patch}:x)}));
+  const delCat=cat=>{ if(cat.locked) return; if(confirm('刪除分類「'+cat.label+'」及其子項目？')) setD(p=>({...p,allocation:p.allocation.filter(x=>x.id!==cat.id)})); };
+  const addCat=()=>{ const id=uid(); setD(p=>({...p,allocation:[...p.allocation,{id,label:'新分類',items:[{id:uid(),name:'新項目',amt:0}]}]})); setOpen(o=>({...o,[id]:true})); };
+  const setItem=(cid,iid,patch)=>setD(p=>({...p,allocation:p.allocation.map(x=>x.id===cid?{...x,items:x.items.map(i=>i.id===iid?{...i,...patch}:i)}:x)}));
+  const delItem=(cid,iid)=>setD(p=>({...p,allocation:p.allocation.map(x=>x.id===cid?{...x,items:x.items.filter(i=>i.id!==iid)}:x)}));
+  const addItem=cid=>setD(p=>({...p,allocation:p.allocation.map(x=>x.id===cid?{...x,items:[...x.items,{id:uid(),name:'新項目',amt:0}]}:x)}));
+  const setInj=(bid,iid,patch)=>setD(p=>({...p,bonuses:p.bonuses.map(b=>b.id===bid?{...b,inj:(b.inj||[]).map(i=>i.id===iid?{...i,...patch}:i)}:b)}));
+  const addInj=bid=>setD(p=>({...p,bonuses:p.bonuses.map(b=>b.id===bid?{...b,inj:[...(b.inj||[]),{id:uid(),cat:'',ratio:0}]}:b)}));
+  const delInj=(bid,iid)=>setD(p=>({...p,bonuses:p.bonuses.map(b=>b.id===bid?{...b,inj:(b.inj||[]).filter(i=>i.id!==iid)}:b)}));
+  const setBonus=(id,patch)=>setD(p=>({...p,bonuses:p.bonuses.map(b=>b.id===id?{...b,...patch}:b)}));
+  const setHold=(id,patch)=>setD(p=>({...p,holdings:p.holdings.map(h=>h.id===id?{...h,...patch}:h)}));
+  const delHold=h=>{ if(confirm('刪除持股「'+h.ticker+'」及全部交易紀錄？')) setD(p=>({...p,holdings:p.holdings.filter(x=>x.id!==h.id)})); };
+  const delTrade=(hid,tid)=>setD(p=>({...p,holdings:p.holdings.map(h=>h.id===hid?{...h,trades:h.trades.filter(t=>t.id!==tid)}:h)}));
+  const addHold=v=>setD(p=>({...p,holdings:[...p.holdings,{id:uid(),ticker:v.ticker,name:v.ticker,cur:v.cur,price:v.price,trades:[{id:uid(),type:'buy',date:todayISO(),shares:v.shares,price:v.cost}]}]}));
+  const addTrade=(hid,v)=>setD(p=>({...p,holdings:p.holdings.map(h=>h.id===hid?{...h,trades:[...h.trades,v.type==='div'?{id:uid(),type:'div',date:v.date,amt:v.amt}:{id:uid(),type:v.type,date:v.date,shares:v.shares,price:v.price}]}:h)}));
+  const allocated=sumBy(d.allocation,catTotal), salary=d.salary||0, bal=salary-allocated;
+  const base=salary>0?salary:allocated, pctOf=v=>base>0?Math.round(v/base*100)+'%':'—';
+  const items=[{k:'美股',v:c.us,c:'#6d28d9'},{k:'台股',v:c.tw,c:'#a78bfa'},{k:'定存',v:c.td,c:'#15803d'},{k:'高利活存',v:c.hy,c:'#22c55e'},{k:'現金',v:c.demand,c:'#9ca3af'}];
+  const R=120,cx=120,cy=120,tw=items.reduce((s,h)=>s+h.v,0); let a=Math.PI;
+  const slices=tw>0?items.filter(h=>h.v>0).map(h=>{const a0=a,a1=a+h.v/tw*2*Math.PI;a=a1;const mid=(a0+a1)/2;
+    const pt=t=>[cx+R*Math.cos(t),cy+R*Math.sin(t)];const [x0,y0]=pt(a0),[x1,y1]=pt(a1);
+    return {...h,full:h.v===tw,pct:Math.round(h.v/tw*100),path:`M${cx} ${cy} L${x0} ${y0} A${R} ${R} 0 ${a1-a0>Math.PI?1:0} 1 ${x1} ${y1} Z`,lx:cx+R*.62*Math.cos(mid),ly:cy+R*.62*Math.sin(mid)};}):[];
+  const hsorted=[...d.holdings].sort((a,b)=>(a.cur===b.cur?0:a.cur==='USD'?-1:1));   // 美股在前、台股在後
+  const mvAll=sumBy(d.holdings,h=>holdVals(h).mv*(h.cur==='USD'?(d.fx||32):1));
+  const segs=[['成長型資產',c.growth,'#6d28d9'],['防禦型資產',c.def,'#22c55e'],['死水資產',c.dead,'#a1a1aa']];
+  const f=fireCalc(d,c);
+  return (<div className="pt-[17px]">
+    <div className="flex items-center px-4 gap-4">
+      <svg viewBox="0 0 240 240" width="220" height="220" className="shrink-0" fontFamily="Inter">
+        {!slices.length&&<circle cx="120" cy="120" r="120" fill="#f4f4f5"/>}
+        {slices.map(s=><g key={s.k} style={{cursor:'pointer'}} onClick={()=>setPie(s.k)}>
+          {s.full?<circle cx="120" cy="120" r="120" fill={s.c}/>:<path d={s.path} fill={s.c} stroke="#fff" strokeWidth="1"/>}
+          <text x={s.full?120:s.lx} y={s.full?120:s.ly} fontSize="11" fontWeight="600" fill="#fff" textAnchor="middle"><tspan x={s.full?120:s.lx} dy="-2">{s.k}</tspan><tspan x={s.full?120:s.lx} dy="12">{s.pct}%</tspan></text></g>)}
+      </svg>
+      <div className="text-xs font-medium flex flex-col gap-1.5 min-w-0 flex-1">
+        {items.map(h=><div key={h.k} onClick={()=>setPie(h.k)} className="grid grid-cols-[5.5em_1fr] gap-2 items-center cursor-pointer"><span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full shrink-0" style={{background:h.c}}/>{h.k}</span><Fit className="min-w-0">{fmt(h.v)}</Fit></div>)}
+      </div>
+    </div>
+
+    <Card className="mx-4 mt-8 p-4">
+      <div className="text-sm font-semibold">資產分類</div>
+      <div className="flex h-4 rounded-full overflow-hidden bg-neutral-100 mt-3">{segs.map(([l,v,col])=><div key={l} style={{width:(c.total>0?v/c.total*100:0)+'%',background:col}}/>)}</div>
+      <div className="mt-3 flex flex-col gap-1.5">{segs.map(([l,v,col])=>(<div key={l} className="grid grid-cols-[10px_1fr_1fr_36px] gap-2 items-center text-xs">
+        <i className="w-2.5 h-2.5 rounded-full" style={{background:col}}/><span className="font-medium">{l}</span><Fit className="min-w-0">{fmt(v)}</Fit><span className="text-zinc-500 text-right">{c.total>0?Math.round(v/c.total*100):0}%</span></div>))}</div>
+    </Card>
+
+    <Acc title="銀行帳戶" sub={`本月利息 ${fmt(c.mInterest)} · 預估年息 ${fmt(c.interest)}`} open={sec.bank} onToggle={()=>tsec('bank')} right={<Btn onClick={addAcc}>＋ 新增</Btn>}>
+      {d.accounts.map(ac=>{const inf=acctInfo(ac);return (
+        <div key={ac.id} className="border-b-[0.5px] border-neutral-300">
+          <div className="h-14 grid grid-cols-[104px_1fr_1fr_20px] gap-2 items-center cursor-pointer" onClick={()=>tog(ac.id)}>
+            <div className="min-w-0 flex items-center gap-1"><Fit className="text-xs font-medium min-w-0">{ac.name}</Fit><span className={`text-[8px] leading-4 px-1 rounded shrink-0 ${inf.tag==='生息'?'bg-green-100 text-green-700':'bg-neutral-100 text-zinc-500'}`}>{inf.tag}</span></div>
+            <Fit className="min-w-0 text-sm text-black/60">{fmt(acctTotal(ac))}</Fit>
+            <Fit className="min-w-0 text-xs text-zinc-500">息 {fmt(inf.mInterest)}</Fit>
+            <Chev open={open[ac.id]}/>
+          </div>
+          {open[ac.id]&&<div className="pb-3">
+            <div className="flex gap-2 items-center"><Txt value={ac.name} onChange={v=>setAcc(ac.id,{name:v})} className="flex-1"/><Btn danger onClick={()=>delAcc(ac)}>刪除</Btn></div>
+            {AT.map(([k,l])=>{const m=(ac.m&&ac.m[k])||{};return (<div key={k} className="mt-2 p-2 rounded-lg bg-neutral-50">
+              <div className="flex items-center justify-between"><span className="text-xs font-semibold">{l}</span>
+                <label className="flex items-center gap-1 text-[10px] text-zinc-500"><input type="checkbox" checked={!!m.ef} onChange={e=>setM(ac.id,k,{ef:e.target.checked})}/>緊急預備金</label></div>
+              <Num label="金額" value={ac[k]} onChange={v=>setAcc(ac.id,{[k]:v})}/>
+              <Num label="年利率 %" value={m.rate||0} dec={3} onChange={v=>setM(ac.id,k,{rate:v})}/>
+              <label className="flex items-center justify-between gap-3 py-1.5 text-sm"><span>到期日</span><DateBox clearable value={m.exp||''} onChange={v=>setM(ac.id,k,{exp:v})} className="w-32 h-9 px-3 text-sm"/></label>
+              <Num label="上限金額" value={m.cap||0} onChange={v=>setM(ac.id,k,{cap:v})}/>
+            </div>);})}
+          </div>}
+        </div>);})}
+    </Acc>
+
+    <Acc title="股票持股" sub={`${d.holdings.length} 檔 · 總市值 ${fmt(mvAll)}`} open={sec.stock} onToggle={()=>tsec('stock')} right={<Btn onClick={e=>{e.stopPropagation();setStForm({kind:'new'});}}>＋ 新增</Btn>}>
+      <Num label="美元匯率（USD→TWD）" value={d.fx||32} onChange={v=>setD(p=>({...p,fx:v}))}/>
+      {!d.holdings.length&&<div className="text-xs text-zinc-400 py-3 whitespace-normal">尚無持股。按「新增持股」，或在每月記帳選「投資」類別買股，會自動建立。現價為手動輸入（無即時報價）。</div>}
+      {hsorted.map((h,i)=>{const v=holdVals(h);return (
+        <div key={h.id}>{(i===0||hsorted[i-1].cur!==h.cur)&&<div className="text-xs font-semibold text-zinc-500 pt-2">{h.cur==='USD'?'美股':'台股'}</div>}<div className={`border-b-[0.5px] border-neutral-300 ${open['h'+h.id]?'bg-neutral-100/60 rounded-lg px-2 my-1':''}`}>
+          <div className="py-2 flex items-center gap-2 cursor-pointer" onClick={()=>tog('h'+h.id)}>
+            <div className="flex-1 min-w-0"><Fit className="text-sm font-semibold">{h.ticker}</Fit><Fit className="text-[11px] text-zinc-500">{h.cur} · {Math.round(v.sh*1000)/1000} 股 · 均價 {Math.round(v.avg*100)/100}</Fit></div>
+            <div className="w-[130px] min-w-0"><Fit className="text-sm font-semibold">{fmtC(v.mv,h.cur)}</Fit><Fit className={`text-[11px] font-medium ${v.pl>=0?'text-green-700':'text-red-600'}`}>{v.pl>=0?'+':''}{fmtC(v.pl,h.cur)}（{v.plPct.toFixed(1)}%）</Fit></div>
+            <Chev open={open['h'+h.id]}/>
+          </div>
+          {open['h'+h.id]&&<div className="pb-3">
+            <Num label={`現價（${h.cur}）`} value={h.price} onChange={v2=>setHold(h.id,{price:v2})}/>
+            <div className="text-xs font-semibold text-zinc-500 mt-1">交易紀錄　股息累計 {fmtC(v.div,h.cur)}</div>
+            {[...h.trades].sort((x,y)=>y.date.localeCompare(x.date)).map(t=>(<div key={t.id} className="flex items-center gap-2 py-1 text-xs border-b-[0.5px] border-neutral-200">
+              <span className="w-[70px] text-center">{fmtDate(t.date)}</span><span className={`w-9 font-medium ${t.type==='buy'?'text-red-600':t.type==='sell'?'text-green-700':'text-blue-600'}`}>{t.type==='buy'?'買進':t.type==='sell'?'賣出':'股息'}</span>
+              <Fit className="flex-1 min-w-0 text-zinc-600">{t.type==='div'?fmtC(t.amt,h.cur):`${Math.round(t.shares*1000)/1000} 股 @ ${Math.round(t.price*100)/100}`}</Fit>
+              <button onClick={()=>delTrade(h.id,t.id)} className="text-zinc-400">✕</button></div>))}
+            <div className="flex gap-2 mt-2"><Btn gray onClick={()=>setStForm({kind:'buy',hid:h.id})}>買進</Btn><Btn gray onClick={()=>setStForm({kind:'sell',hid:h.id})}>賣出</Btn><Btn gray onClick={()=>setStForm({kind:'div',hid:h.id})}>股息</Btn><Btn gray danger onClick={()=>delHold(h)}>刪除持股</Btn></div>
+          </div>}
+        </div></div>);})}
+    </Acc>
+
+    <Card className="mx-4 mt-6 pb-4">
+      <div className="px-4 h-14 flex items-center gap-2"><div className="flex-1 text-sm font-semibold leading-5">現金分配</div><Btn onClick={addCat}>＋ 新增</Btn><span className="w-5 shrink-0"/></div>
+      <div className="px-4">
+        <div className="min-h-12 flex items-center gap-2"><span className="text-sm font-semibold flex-1">固定支配</span>{salEdit?<NumBox autoFocus value={salary} onChange={v=>setD(p=>({...p,salary:v}))} className="w-28 h-9 px-2 text-sm"/>:<Fit className="w-28 text-sm text-zinc-500">{fmt(salary)}</Fit>}
+          <button onClick={()=>setSalEdit(e=>!e)} aria-label="編輯固定支配" className="w-5 shrink-0 text-zinc-400">{salEdit?'✓':'✎'}</button></div>
+        <div className="flex items-center justify-between gap-3 py-1 text-xs text-zinc-500"><span>已分配金額</span><span>{fmt(allocated)}</span></div>
+        <div className="flex items-center justify-between gap-3 py-1 text-sm font-semibold"><span>餘額（固定支配 − 已分配）</span><span className={bal<0?'text-red-600':'text-green-700'}>{fmt(bal)}</span></div>
+      </div>
+      <div className="px-4 pt-3 flex flex-col">
+        {d.allocation.map(cat=>(
+          <div key={cat.id}>
+            <div className="min-h-12 py-2 flex items-center gap-2 cursor-pointer min-w-0" onClick={()=>tog(cat.id)}>
+              <Fit className="max-w-[38%] px-4 py-2 bg-black text-white text-sm font-medium leading-5 rounded-tl-2xl rounded-tr-sm rounded-bl-2xl rounded-br-2xl">{cat.label}</Fit>
+              <Chev open={open[cat.id]}/>
+              <Fit className="flex-1 min-w-0 text-sm text-zinc-500">{fmt(catTotal(cat))}</Fit>
+              <span className="w-10 text-right text-xs font-medium text-zinc-400">{pctOf(catTotal(cat))}</span>
+            </div>
+            {open[cat.id]&&<div className="pb-2">
+              {cat.label==='選擇消費'&&<div className="text-[10px] text-zinc-400 mb-1">含娛樂、旅遊等選擇性開銷（Real FIRE 預設計入）</div>}
+              {!cat.locked&&<div className="flex gap-2 items-center mb-1"><Txt value={cat.label} onChange={v=>setCat(cat.id,{label:v})} className="flex-1"/><Btn danger onClick={()=>delCat(cat)}>刪除分類</Btn></div>}
+              {cat.items.map(it=>(<div key={it.id} className="flex gap-2 items-center py-1">
+                <Txt value={it.name} onChange={v=>setItem(cat.id,it.id,{name:v})} className="flex-1"/>
+                <NumBox value={it.amt} onChange={v=>setItem(cat.id,it.id,{amt:v})} className="w-24 h-9 px-3 text-sm"/>
+                <Btn danger onClick={()=>delItem(cat.id,it.id)}>✕</Btn></div>))}
+              <Btn onClick={()=>addItem(cat.id)}>＋ 新增</Btn>
+            </div>}
+          </div>))}
+        <div className="border-t-[0.5px] border-neutral-300 mt-1">
+          <div className="min-h-12 flex items-center gap-2 cursor-pointer" onClick={()=>tog('bonus')}>
+            <span className="text-sm font-semibold flex-1">不定期獎金</span><Fit className="w-28 text-sm text-zinc-500">{fmt(bonusYear(d))}</Fit><Chev open={open.bonus}/></div>
+          {open.bonus&&<div className="pb-2">
+            <div className="flex justify-end mb-1"><Btn red={bEdit} onClick={()=>setBEdit(e=>!e)}>{bEdit?'完成':'編輯'}</Btn></div>
+            {!d.bonuses.length&&<div className="text-xs text-zinc-400 py-2">尚無獎金{bEdit?'':'，按「編輯」新增'}</div>}
+            {d.bonuses.map(b=>(<div key={b.id} className="py-2 border-b-[0.5px] border-neutral-200">
+              {bEdit?<>
+                <div className="flex gap-2 items-center"><Txt value={b.name||''} onChange={v=>setBonus(b.id,{name:v})} ph="獎金名稱" className="flex-1"/><Btn danger onClick={()=>setD(p=>({...p,bonuses:p.bonuses.filter(x=>x.id!==b.id)}))}>✕</Btn></div>
+                <div className="flex gap-2 items-center mt-1.5"><NumBox value={b.amt} onChange={v=>setBonus(b.id,{amt:v})} className="flex-1 h-9 px-3 text-sm"/>
+                  <select value={b.month} onChange={e=>setBonus(b.id,{month:+e.target.value})} className="h-9 rounded-lg border border-neutral-200 px-2 text-sm bg-white">{[1,2,3,4,5,6,7,8,9,10,11,12].map(m=><option key={m} value={m}>{m} 月入帳</option>)}</select></div>
+                <div className="text-[10px] text-zinc-500 mt-1.5">淨注入項目（分類與比例 %）</div>
+                {(b.inj||[]).map(i=>(<div key={i.id} className="flex gap-2 items-center mt-1">
+                  <select value={i.cat||''} onChange={e=>setInj(b.id,i.id,{cat:e.target.value})} className="flex-1 min-w-0 h-9 rounded-lg border border-neutral-200 px-2 text-sm bg-white"><option value="">選擇分類</option>{d.allocation.map(x=><option key={x.id} value={x.label}>{x.label}</option>)}</select>
+                  <NumBox value={i.ratio||0} onChange={v=>setInj(b.id,i.id,{ratio:Math.min(100,v)})} className="w-20 h-9 px-3 text-sm"/><span className="text-xs">%</span>
+                  <Btn danger onClick={()=>delInj(b.id,i.id)}>✕</Btn></div>))}
+                <div className="mt-1.5"><Btn onClick={()=>addInj(b.id)}>＋ 新增</Btn></div>
+              </>:<>
+                <div className="flex items-center gap-2 text-sm"><Fit className="flex-1 min-w-0 font-medium">{b.name||'（未命名）'}</Fit><Fit className="w-24 text-zinc-600">{fmt(b.amt)}</Fit><span className="text-xs text-zinc-500 w-16 text-right">{b.month} 月入帳</span></div>
+                {(b.inj||[]).map(i=><div key={i.id} className="text-[11px] text-zinc-500 pl-2 mt-0.5">→ {i.cat||'未選分類'} {i.ratio||0}%（{fmt(b.amt*(i.ratio||0)/100)}）</div>)}
+              </>}
+            </div>))}
+            {bEdit&&<div className="mt-2"><Btn onClick={()=>setD(p=>({...p,bonuses:[...p.bonuses,{id:uid(),name:'',amt:0,month:12,inj:[]}]}))}>＋ 新增</Btn></div>}
+          </div>}
+        </div>
+      </div>
+    </Card>
+
+    <div className="mx-4 mt-6"><AiCard title="AI 資產建議" items={diagDetail(d,c,f)}/></div>
+    <FireSim d={d} c={c}/>
+    <div style={{height:'calc(76px + env(safe-area-inset-bottom,0px))'}}/>
+    {pie&&<Sheet title={pie+'明細'} onClose={()=>setPie(null)}>
+      {(pie==='美股'||pie==='台股')?(()=>{const cur=pie==='美股'?'USD':'TWD',hs2=d.holdings.filter(h=>h.cur===cur);return <>
+        {hs2.map(h=>{const v=holdVals(h),mv=v.mv*(cur==='USD'?(d.fx||32):1);return <div key={h.id} className="flex justify-between gap-2 text-sm py-1.5 border-b-[0.5px] border-neutral-200"><span>{h.ticker}　{Math.round(v.sh*1000)/1000} 股</span><span>{fmt(mv)}　<span className={v.pl>=0?'text-green-700':'text-red-600'}>{v.pl>=0?'+':''}{v.plPct.toFixed(1)}%</span></span></div>;})}
+        {!hs2.length&&<div className="text-xs text-zinc-400">尚無持股</div>}</>;})()
+      :(()=>{const k=pie==='定存'?'fixed':pie==='高利活存'?'hy':'demand';return <>{d.accounts.map(a=>{const m=(a.m&&a.m[k])||{};return <div key={a.id} className="flex justify-between gap-2 text-sm py-1.5 border-b-[0.5px] border-neutral-200"><span>{a.name}</span><span>{fmt(a[k])}<span className="text-[10px] text-zinc-400">　{m.rate||0}%{m.exp?` · 到期 ${fmtDate(m.exp)}`:''}</span></span></div>;})}</>;})()}
+    </Sheet>}
+    {stForm&&<StockForm kind={stForm.kind} onSave={v=>stForm.hid?addTrade(stForm.hid,v):addHold(v)} onClose={()=>setStForm(null)}/>}
+  </div>);
+}
+
+/* ============ 頁 3：未來目標 ============ */
+const goalColor=g=>(g.budget>0&&g.saved>=g.budget)?'#22c55e':PRI[g.pri].c;
+function SwipeLeft({open,onOpen,onClose,actions,children}) {
+  const st=useRef(null), W=actions.length*72;
+  const down=e=>{st.current={x:e.clientX,y:e.clientY};};
+  const up=e=>{
+    const sx=st.current; st.current=null; if(!sx) return;
+    const dX=e.clientX-sx.x; if(Math.abs(e.clientY-sx.y)>30) return;
+    if(dX<-40) onOpen(); else if(dX>40||(open&&Math.abs(dX)<5)) onClose();
+  };
+  return (<div className="relative overflow-hidden border-b-[0.5px] border-neutral-300" style={{touchAction:'pan-y'}}>
+    <div className="absolute right-0 top-0 bottom-0 flex">{actions.map(a=><button key={a.l} onClick={()=>{onClose();a.fn();}} className={`w-[72px] text-white text-xs font-medium ${a.c}`}>{a.l}</button>)}</div>
+    <div className="relative bg-white transition-transform duration-200" style={{transform:`translateX(${open?-W:0}px)`}} onPointerDown={down} onPointerUp={up} onPointerCancel={()=>{st.current=null;}}>{children}</div>
+  </div>);
+}
+function PageGoals({d,setD,fund}) {
+  const [form,setForm]=useState(null);   // {kind:'goal'|'wish', id?}
+  const [swp,setSwp]=useState(null);
+  const [pri,setPri]=useState('mid'), [name,setName]=useState(''), [budget,setBudget]=useState(0), [saved,setSaved]=useState(0);
+  const openForm=(kind,it)=>{setPri(it&&it.pri||'mid');setName(it?it.name:'');setBudget(it?it.budget:0);setSaved(it&&it.saved||0);setForm({kind,id:it&&it.id});};
+  const saveForm=()=>{
+    const {kind,id}=form;
+    if(kind==='goal') setD(p=>({...p,goals:id?p.goals.map(g=>g.id===id?{...g,name,pri,budget,saved}:g):[...p.goals,{id:uid(),name,pri,budget,saved}]}));
+    else setD(p=>({...p,wishlist:id?p.wishlist.map(w=>w.id===id?{...w,name,budget}:w):[...p.wishlist,{id:uid(),name,budget,done:false}]}));
+    setForm(null);
+  };
+  const setSavedOf=(id,v)=>setD(p=>({...p,goals:p.goals.map(g=>g.id===id?{...g,saved:v}:g)}));
+  const delGoal=g=>{ if(confirm('刪除「'+g.name+'」？')) setD(p=>({...p,goals:p.goals.filter(x=>x.id!==g.id)})); };
+  const toggleWish=id=>setD(p=>({...p,wishlist:p.wishlist.map(w=>w.id===id?{...w,done:!w.done}:w)}));
+  const delWish=w=>{ if(confirm('刪除「'+w.name+'」？')) setD(p=>({...p,wishlist:p.wishlist.filter(x=>x.id!==w.id)})); };
+  const wishes=[...d.wishlist].sort((a,b)=>(a.done?1:0)-(b.done?1:0));   // 達成後自動排到最下面
+  // 預計達成：未來基金月分配 + 獎金淨注入，依年化報酬率做複利試算
+  const mths=fundCalc(d,fund).months;
+  const remaining=Math.max(0,fund.target-fund.saved);
+  const eta=mths==null?'—':mths===0?'已達成':(()=>{const dt=addMonths(mths);return `${dt.getFullYear()}/${pad(dt.getMonth()+1)}`;})();
+  const etaSub=mths>0?`距離現在還有 ${fmtDur(mths)}`:null;
+  const GR='grid grid-cols-[10px_1fr_56px_66px_34px] gap-2 px-3 items-center';
+  const WR='grid grid-cols-[1fr_80px_44px] gap-2 px-3 items-center';
+  return (<div className="px-4 pt-[17px]">
+    <div className="grid grid-cols-2 gap-3">
+      <Card className="p-4 h-[184px] min-w-0 flex flex-col">
+        <div className="text-xs font-semibold leading-4 text-zinc-500">目標金額</div>
+        <Fit className="text-lg font-semibold leading-7 text-right">{fmt(fund.target)}</Fit>
+        <div className="text-xs font-semibold leading-4 text-zinc-500">－ 未來基金</div>
+        <Fit className="text-lg font-semibold leading-7 text-right text-green-500">{fmt(fund.saved)}</Fit>
+        <div className="border-t border-black my-1"/>
+        <div className="text-xs font-semibold leading-4 text-zinc-500">＝ 尚需準備</div>
+        <Fit className="text-lg font-semibold leading-7 text-right text-red-500">{fmt(remaining)}</Fit>
+      </Card>
+      <Card className="p-4 h-[184px] min-w-0 flex flex-col">
+        <div className="text-sm font-semibold leading-5">達成率</div>
+        <Fit className="text-3xl font-semibold leading-10">{fund.rate.toFixed(2)}%</Fit>
+        <div className="text-sm font-semibold leading-5 mt-5">預計達成</div>
+        <Fit className="text-2xl font-semibold leading-8">{eta}</Fit>
+        {etaSub&&<Fit className="text-[10px] text-zinc-500 mt-0.5">{etaSub}</Fit>}
+      </Card>
+    </div>
+    <div className="mt-6 flex items-center justify-between"><div className="text-sm font-semibold">未來基金項目</div><Btn onClick={()=>openForm('goal')}>＋ 新增項目</Btn></div>
+    <div className="mt-1">
+      <div className={`${GR} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span/><span>項目</span><span>預算</span><span>已準備</span><span>達成</span></div>
+      {d.goals.map(g=>(
+        <SwipeLeft key={g.id} open={swp===g.id} onOpen={()=>setSwp(g.id)} onClose={()=>setSwp(null)}
+          actions={[{l:'編輯',c:'bg-blue-600',fn:()=>openForm('goal',g)},{l:'刪除',c:'bg-red-600',fn:()=>delGoal(g)}]}>
+          <div className={`${GR} h-11`}>
+            <i className="w-2.5 h-2.5 rounded-full" style={{background:goalColor(g)}}/>
+            <Fit className="text-xs font-medium min-w-0">{g.name}</Fit>
+            <Fit className="text-[10px] font-medium text-zinc-500 min-w-0">{fmt(g.budget)}</Fit>
+            <div className="flex items-center gap-0.5 min-w-0"><Fit className="flex-1 min-w-0 text-[10px] font-medium text-zinc-500">{fmt(g.saved)}</Fit><button onClick={()=>OPEN_CALC({value:g.saved,onChange:v=>setSavedOf(g.id,v)})} aria-label="編輯已準備金額" className="text-[10px] text-zinc-400 shrink-0">✎</button></div>
+            <Fit className="text-[10px] font-medium min-w-0">{g.budget?Math.round(g.saved/g.budget*100):0}%</Fit>
+          </div>
+        </SwipeLeft>))}
+    </div>
+    <div className="mt-6 flex items-center justify-between"><div className="text-sm font-semibold">願望清單</div><Btn onClick={()=>openForm('wish')}>＋ 新增項目</Btn></div>
+    <div className="mt-1">
+      <div className={`${WR} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span>願望</span><span>預算</span><span className="text-center">達成</span></div>
+      {wishes.map(w=>(
+        <SwipeLeft key={w.id} open={swp===w.id} onOpen={()=>setSwp(w.id)} onClose={()=>setSwp(null)}
+          actions={[{l:'編輯',c:'bg-blue-600',fn:()=>openForm('wish',w)},{l:'刪除',c:'bg-red-600',fn:()=>delWish(w)}]}>
+          <div className={`${WR} h-10`}>
+            <Fit className={`text-xs font-medium min-w-0 ${w.done?'text-zinc-400 line-through':''}`}>{w.name}</Fit>
+            <Fit className="text-[10px] font-medium text-zinc-500 min-w-0">{fmt(w.budget)}</Fit>
+            <button onClick={()=>toggleWish(w.id)} aria-label="達成" className={`w-5 h-5 rounded-lg mx-auto flex items-center justify-center text-white text-[11px] ${w.done?'bg-green-500':'bg-zinc-300'}`}>{w.done?'✓':''}</button>
+          </div>
+        </SwipeLeft>))}
+    </div>
+    <div style={{height:'calc(76px + env(safe-area-inset-bottom,0px))'}}/>
+    {form&&<Sheet title={(form.id?'編輯':'新增')+(form.kind==='goal'?'未來基金項目':'願望')} onClose={()=>setForm(null)}>
+      <div className="flex flex-col gap-3">
+        {form.kind==='goal'&&<div><div className="text-xs text-zinc-500 mb-1">優先級（完成後自動變綠色）</div>
+          <div className="flex gap-2">{Object.entries(PRI).map(([k,v])=><Pill key={k} on={pri===k} color={v.c} onClick={()=>setPri(k)}>{v.l}</Pill>)}</div></div>}
+        <Txt value={name} onChange={setName} ph="項目名稱" className="h-10"/>
+        <div><div className="text-xs text-zinc-500 mb-1">預算金額</div><NumBox value={budget} onChange={setBudget} className="w-full h-10 px-3 text-sm text-left"/></div>
+        {form.kind==='goal'&&<div><div className="text-xs text-zinc-500 mb-1">已準備金額</div><NumBox value={saved} onChange={setSaved} className="w-full h-10 px-3 text-sm text-left"/></div>}
+        <SaveBtn disabled={!name.trim()||!(budget>0)} onClick={saveForm}>{form.id?'儲存':'新增'}</SaveBtn>
+      </div>
+    </Sheet>}
+  </div>);
+}
+
+/* ============ 頁 4：每月記帳 ============ */
+function SwipeRow({open,onOpen,onClose,onEdit,children}) {
+  const st=useRef(null);
+  const dx=open==='r'?72:open==='l'?-72:0;
+  const down=e=>{st.current={x:e.clientX,y:e.clientY};};
+  const up=e=>{
+    const s=st.current; st.current=null; if(!s) return;
+    const dX=e.clientX-s.x; if(Math.abs(e.clientY-s.y)>30) return;
+    if(dX>40) (open==='l'?onClose():onOpen('r'));
+    else if(dX<-40) (open==='r'?onClose():onOpen('l'));
+    else if(open&&Math.abs(dX)<5) onClose();
+  };
+  const eb="absolute top-0 bottom-0 w-[72px] bg-blue-600 text-white text-xs font-medium";
+  return (<div className="relative overflow-hidden border-b-[0.5px] border-neutral-300" style={{touchAction:'pan-y'}}>
+    <button onClick={onEdit} className={eb+' left-0'}>編輯</button>
+    <button onClick={onEdit} className={eb+' right-0'}>編輯</button>
+    <div className="relative bg-white transition-transform duration-200 select-none" style={{transform:`translateX(${dx}px)`}} onPointerDown={down} onPointerUp={up} onPointerCancel={()=>{st.current=null;}}>{children}</div>
+  </div>);
+}
+function LP({onLong,onClick,className='',children}) {   // 長按
+  const t=useRef(null), fired=useRef(false);
+  const clr=()=>clearTimeout(t.current);
+  return <div className={`select-none ${className}`} style={{WebkitTouchCallout:'none'}}
+    onClick={e=>{if(fired.current){fired.current=false;return;}onClick&&onClick(e);}}
+    onPointerDown={()=>{fired.current=false;t.current=setTimeout(()=>{fired.current=true;onLong();},600);}}
+    onPointerUp={clr} onPointerLeave={clr} onPointerCancel={clr} onContextMenu={e=>e.preventDefault()}>{children}</div>;
+}
+function ArchiveRow({a,onDelMonth,onDelTx}) {
+  const [open,setOpen]=useState(false);
+  const rows=o=>Object.entries(o).sort((x,y)=>y[1]-x[1]);
+  const [yy,mm]=a.ym.split('-');
+  const list=[...(a.tx||[])].sort((x,y)=>x.date.localeCompare(y.date));
+  return (<div className="border-b-[0.5px] border-neutral-300">
+    <LP onLong={()=>onDelMonth(a.ym)} onClick={()=>setOpen(o=>!o)} className="h-12 px-2 flex items-center gap-2 cursor-pointer">
+      <Fit className="flex-1 min-w-0 text-sm font-semibold">{yy}-{+mm}月收支紀錄</Fit>
+      <Fit className="w-[84px] text-xs text-green-700">收入 {fmt(a.income)}</Fit>
+      <Fit className="w-[84px] text-xs text-red-600">支出 {fmt(a.expense)}</Fit>
+      <Chev open={open}/>
+    </LP>
+    {open&&<div className="px-2 pb-3">
+      <div className="grid grid-cols-2 gap-4 text-xs">
+        {[['收入',a.inc,'text-green-700'],['支出',a.exp,'text-red-600']].map(([t,o,cl])=>(<div key={t}>
+          <div className={`font-semibold mb-1 ${cl}`}>{t}</div>
+          {rows(o).map(([k,v])=><div key={k} className="flex justify-between gap-2"><span>{k}</span><span className="text-zinc-500">{fmt(v)}</span></div>)}
+          {!rows(o).length&&<div className="text-zinc-400">-</div>}</div>))}
+      </div>
+      {a.invest>0&&<div className="text-xs mt-2 font-semibold text-purple-600">投資　{fmt(a.invest)}</div>}
+      <div className="mt-3 mb-1 text-xs font-semibold text-zinc-500">逐筆明細</div>
+      {a.tx?list.map(t=>(<LP key={t.id} onLong={()=>onDelTx(a.ym,t.id)} className="py-1.5 border-b-[0.5px] border-neutral-200 text-xs">
+          <div className="grid grid-cols-[70px_44px_1fr_64px] gap-2 items-center">
+            <span className="text-center">{fmtDate(t.date)}</span><span>{t.cat}</span><Fit className="min-w-0">{t.item}</Fit>
+            <Fit className={`min-w-0 font-medium ${t.type==='income'?'text-green-700':'text-red-600'}`}>{fmt(t.amt)}</Fit>
+          </div>
+          {t.note&&<div className="text-[10px] text-zinc-400 mt-0.5 truncate">備註：{t.note}</div>}
+        </LP>)):<div className="text-[10px] text-zinc-400 py-2">這個月份只保留分類統計。</div>}
+    </div>}
+  </div>);
+}
+function PageLedger({d,setD,onEdit,onInfo}) {
+  const [openId,setOpenId]=useState(null);   // {id,side}
+  const [hist,setHist]=useState(false);
+  const delMonth=ym=>{ const [yy,mm]=ym.split('-'); if(confirm('刪除「'+yy+'-'+(+mm)+'月收支紀錄」？')) setD(p=>({...p,archive:p.archive.filter(a=>a.ym!==ym)})); };
+  const delArcTx=(ym,id)=>{ if(!confirm('刪除這筆明細？')) return;
+    setD(p=>({...p,archive:p.archive.map(a=>{ if(a.ym!==ym) return a; const tx=a.tx.filter(t=>t.id!==id); return {...a,...summarize(tx),tx}; }).filter(a=>!a.tx||a.tx.length>0)})); };
+  const ym=todayISO().slice(0,7);            // 統計期間：本月 1 日～最後一日
+  const cur=d.tx.filter(t=>t.date.slice(0,7)===ym).sort((a,b)=>a.date.localeCompare(b.date));
+  const inc=cur.filter(t=>t.type==='income'), exp=cur.filter(t=>t.type==='expense');
+  const tI=sumBy(inc,t=>t.amt), tE=sumBy(exp,t=>t.amt), tV=sumBy(cur.filter(t=>t.type==='invest'),t=>t.amt);
+  const by=(list,cats,tot)=>cats.map(c=>{const v=list.filter(t=>t.cat===c).reduce((s,t)=>s+t.amt,0);return {c,v,p:tot?Math.round(v/tot*100):0};});
+  const iRows=by(inc,INCOME_CATS,tI);
+  const eRows=by(exp,EXPENSE_CATS,tE).sort((a,b)=>b.v-a.v).slice(0,5);
+  const Stat=({title,color,rows})=>(
+    <Card className="flex-1 p-3 min-w-0"><div className={`text-sm font-semibold leading-5 mb-2 ${color}`}>{title}</div>
+      {rows.map(r=><div key={r.c} className="grid grid-cols-[3.4em_1fr_30px] gap-2 h-[25px] items-center text-xs">
+        <Fit className="font-semibold">{r.c}</Fit><Fit className="font-medium text-zinc-500 min-w-0">{r.v?fmt(r.v):'-'}</Fit><span className="font-medium text-zinc-500 text-right">{r.v?r.p+'%':'-'}</span></div>)}
+    </Card>);
+  const RC='grid grid-cols-[8px_70px_46px_1fr_62px_24px] gap-2 px-2.5 items-center';
+  return (<div className="px-4 pt-[17px] flex flex-col gap-3">
+    <Card className="h-[102px] px-4 grid grid-cols-3 gap-2 items-center">
+      <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月總收入</div><Fit className="text-lg font-semibold leading-8 text-green-700 mt-2">{fmt(tI)}</Fit></div>
+      <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月總支出</div><Fit className="text-lg font-semibold leading-8 text-red-600 mt-2">{fmt(tE)}</Fit></div>
+      <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月投資</div><Fit className="text-lg font-semibold leading-8 text-purple-600 mt-2">{fmt(tV)}</Fit></div>
+    </Card>
+    <div className="flex gap-3"><Stat title="收入統計" color="text-green-700" rows={iRows}/><Stat title="支出統計" color="text-red-600" rows={eRows}/></div>
+    <div className="mt-2">
+      <div className={`${RC} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span/><span className="text-center">日期</span><span>分類</span><span>項目</span><span>金額</span><span>備註</span></div>
+      {!cur.length&&<div className="text-xs text-zinc-400 text-center py-6">本月尚無收支，按下方「+」新增</div>}
+      {cur.map(t=>(
+        <SwipeRow key={t.id} open={openId&&openId.id===t.id?openId.side:null} onOpen={side=>setOpenId({id:t.id,side})} onClose={()=>setOpenId(null)} onEdit={()=>{setOpenId(null);onEdit(t);}}>
+          <div className={`${RC} h-[37px] text-xs font-medium`}>
+            <i className={`w-[5px] h-[5px] rounded-full ${t.type==='income'?'bg-green-500':t.type==='invest'?'bg-purple-500':'bg-red-500'}`}/>
+            <Fit className="min-w-0 text-center">{fmtDate(t.date)}</Fit><Fit className="min-w-0">{t.cat}</Fit><Fit className="min-w-0">{t.item}</Fit><Fit className="min-w-0">{fmt(t.amt)}</Fit>
+            <button onClick={e=>{e.stopPropagation();onInfo(t);}} aria-label="備註" className={`w-4 h-4 rounded-full text-white text-[11px] font-bold flex items-center justify-center ${t.note?'bg-blue-500':'bg-neutral-300'}`}>i</button>
+          </div>
+        </SwipeRow>))}
+    </div>
+    <button onClick={()=>setHist(true)} className="mt-4 h-12 px-4 w-full flex items-center justify-between rounded-lg border border-neutral-200 bg-white">
+      <span className="text-sm font-semibold">歷史紀錄</span>
+      <span className="flex items-center gap-1 text-xs text-zinc-500">{d.archive.length} 個月<Chev/></span>
+    </button>
+    <div style={{height:'calc(76px + env(safe-area-inset-bottom,0px))'}}/>
+    {hist&&<Sheet title="歷史紀錄" onClose={()=>setHist(false)}>
+      <div className="text-[10px] text-zinc-400 mb-1">長按月份或逐筆明細可刪除</div>
+      {!d.archive.length&&<div className="text-xs text-zinc-400 py-4 whitespace-normal leading-5">尚無歷史紀錄。每月結束後，當月的收支會自動移到這裡保留，可查閱逐筆明細。</div>}
+      {d.archive.map(a=><ArchiveRow key={a.ym} a={a} onDelMonth={delMonth} onDelTx={delArcTx}/>)}
+    </Sheet>}
+  </div>);
+}
+function TxForm({init,accounts,onSave,onInvest,onDelete,onClose}) {
+  const [date,setDate]=useState(init.date), [type,setType]=useState(init.type), [cat,setCat]=useState(init.cat), [item,setItem]=useState(init.item), [amt,setAmt]=useState(init.amt), [note,setNote]=useState(init.note||'');
+  const [ticker,setTicker]=useState(''), [cur,setCur]=useState('TWD'), [price,setPrice]=useState(0), [shares,setShares]=useState(0), [total,setTotal]=useState(0), [acct,setAcct]=useState(''), [rec,setRec]=useState(false), [day,setDay]=useState(5);
+  const cats=type==='income'?INCOME_CATS:type==='invest'?['投資']:EXPENSE_CATS;
+  const isInv=!onDelete&&type==='invest';
+  const invOk=ticker.trim()&&acct&&(total>0||(price>0&&shares>0));
+  const pick=k=>{setType(k);setCat(k==='income'?'薪水':k==='invest'?'投資':'餐飲');};
+  const L=(t,ch)=><div><div className="text-xs text-zinc-500 mb-1">{t}</div>{ch}</div>;
+  const nb="w-full h-10 px-3 text-sm text-left", sel="h-10 w-full rounded-lg border border-neutral-200 px-3 text-sm bg-white";
+  const save=()=>{ if(isInv) onInvest({date,ticker:ticker.trim(),cur,price,shares,total,acct,rec,day,note}); else onSave({date,type,cat,item:item.trim()||cat,amt,note}); onClose(); };
+  return (<Sheet title={onDelete?'編輯記帳':'新增記帳'} onClose={onClose}>
+    <div className="flex flex-col gap-3">
+      <div className="flex gap-2">{[['expense','支出','#ef4444'],['income','收入','#22c55e'],['invest','投資','#7c3aed']].map(([k,l,col])=><Pill key={k} full on={type===k} color={col} tc="#fff" onClick={()=>pick(k)}>{l}</Pill>)}</div>
+      <div><div className="text-xs text-zinc-500 mb-1">日期</div><DateBox value={date} onChange={setDate}/></div>
+      {!isInv&&<select value={cat} onChange={e=>setCat(e.target.value)} className={sel}>{cats.map(c=><option key={c}>{c}</option>)}</select>}
+      {isInv?<>
+        {L('股票代號（必填）',<Txt value={ticker} onChange={setTicker} ph="例如 0050、AAPL" className="h-10 w-full"/>)}
+        {L('幣別',<select value={cur} onChange={e=>setCur(e.target.value)} className={sel}><option value="TWD">NT（台幣）</option><option value="USD">USD（美元）</option></select>)}
+        {L('股價（選填）',<NumBox value={price} onChange={setPrice} className={nb}/>)}
+        {L('股數（選填）',<NumBox value={shares} onChange={setShares} className={nb}/>)}
+        {L('總額（選填；股價×股數可自動算）',<NumBox value={total} onChange={setTotal} className={nb}/>)}
+        {L('扣款帳戶（必選）',<select value={acct} onChange={e=>setAcct(e.target.value)} className={sel}><option value="">請選擇</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select>)}
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={rec} onChange={e=>setRec(e.target.checked)}/>定期定額，每月
+          <select value={day} onChange={e=>setDay(+e.target.value)} disabled={!rec} className="h-9 rounded-lg border border-neutral-200 px-2 bg-white">{Array.from({length:28},(_,i)=>i+1).map(n=><option key={n} value={n}>{n}</option>)}</select>號 (提醒自動記載)</label>
+      </>:<>
+        <Txt value={item} onChange={setItem} ph="項目名稱" className="h-10 w-full"/>
+        <NumBox value={amt} onChange={setAmt} className={nb}/>
+      </>}
+      <Txt value={note} onChange={setNote} ph="備註（選填）" className="h-10 w-full"/>
+      <SaveBtn disabled={isInv?!invOk:(!(amt>0)||!date)} onClick={save}/>
+      {onDelete&&<button onClick={()=>{if(confirm('刪除這筆記帳？')){onDelete();onClose();}}} className="h-11 rounded-lg border border-neutral-200 text-sm font-medium text-red-600">刪除這筆</button>}
+    </div>
+  </Sheet>);
+}
+
+/* ============ Google 登入畫面 ============ */
+function LoginScreen() {
+  const [err,setErr]=useState('');
+  const login=()=>{
+    setErr('');
+    const provider=new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).catch(e=>{
+      if(e.code==='auth/popup-blocked') return auth.signInWithRedirect(provider);
+      if(e.code==='auth/popup-closed-by-user'||e.code==='auth/cancelled-popup-request') return;
+      setErr(e.code==='auth/unauthorized-domain'?'此網址尚未加入 Firebase 的已授權網域':'登入失敗：'+e.code);
+    });
+  };
+  return (<div className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center gap-4 px-8 text-center">
+    <h1 className="text-xl font-semibold m-0">錢錢💰</h1>
+    <p className="text-sm text-zinc-500 m-0 whitespace-normal">登入後，你的資料會存到雲端，換裝置也能看到。</p>
+    <button onClick={login} className="h-11 px-6 rounded-lg bg-black text-white text-sm font-medium">使用 Google 登入</button>
+    {err&&<p className="text-xs text-red-600 m-0 whitespace-normal">{err}</p>}
+  </div>);
+}
+
+/* ============ App ============ */
+function App() {
+  const [d,setD]=useState(mockData);
+  const [tab,setTab]=useState(0);
+  const [hide,setHide]=useState(()=>{try{return localStorage.getItem('hide')==='1';}catch(e){return false;}});
+  const [menu,setMenu]=useState(false), [profile,setProfile]=useState(false), [calcCfg,setCalcCfg]=useState(null);
+  const [txForm,setTxForm]=useState(null);   // {tx?}
+  const [info,setInfo]=useState(null);
+  const [,setTick]=useState(0);
+  const [ready,setReady]=useState(!CONFIGURED);
+  const [authState,setAuthState]=useState(CONFIGURED?'loading':'in');
+  const [sync,setSync]=useState(CONFIGURED?'連線中…':'離線模式（尚未設定 Firebase）');
+  const docRef=useRef(null), dirty=useRef(false), skip=useRef(false), seq=useRef(0);
+  HIDE=hide; OPEN_CALC=setCalcCfg;
+  useEffect(()=>{ if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>setTick(t=>t+1)); },[]);
+  const toggleHide=()=>setHide(h=>{const n=!h;try{localStorage.setItem('hide',n?'1':'0');}catch(e){}return n;});
+
+  // 監聽登入狀態：登入後讀取並即時監聽 users/{uid}/app/data
+  useEffect(()=>{
+    if(!CONFIGURED) return; let unsub=null;
+    const off=auth.onAuthStateChanged(user=>{
+      if(unsub){ unsub(); unsub=null; }
+      if(!user){ docRef.current=null; dirty.current=false; skip.current=false; setReady(false); setD(mockData); setAuthState('out'); setSync('尚未登入'); return; }
+      setAuthState('in'); setSync('連線中…');
+      docRef.current=db.collection('users').doc(user.uid).collection('app').doc('data');
+      unsub=docRef.current.onSnapshot(snap=>{
+        if(dirty.current||snap.metadata.hasPendingWrites) return;
+        if(snap.exists){ const st=JSON.parse(snap.data().json); const mg=migrate(st); if(mg){ skip.current=true; setD(mg); if(mg!==st) docRef.current.set({json:JSON.stringify(mg)}); } else docRef.current.set({json:JSON.stringify(mockData)}); }  // 舊版資料自動升級
+        else docRef.current.set({json:JSON.stringify(mockData)});
+        setReady(true); setSync('已同步');
+      },err=>setSync('同步失敗：'+err.code));
+    });
+    return ()=>{ off(); unsub&&unsub(); };
+  },[]);
+  // 資料變動 → 0.5 秒後寫入 Firestore
+  useEffect(()=>{
+    if(!ready||!docRef.current) return;
+    if(skip.current){ skip.current=false; return; }
+    dirty.current=true; setSync('儲存中…');
+    const t=setTimeout(()=>{
+      const n=++seq.current;
+      docRef.current.set({json:JSON.stringify(d)}).then(()=>{ if(n===seq.current){ dirty.current=false; setSync('已同步'); } })
+        .catch(err=>setSync('儲存失敗：'+err.code));
+    },500);
+    return ()=>clearTimeout(t);
+  },[d,ready]);
+
+  const fund=useMemo(()=>{const target=sumBy(d.goals,g=>g.budget),saved=sumBy(d.goals,g=>g.saved);return {target,saved,rate:target?saved/target*100:0};},[d.goals]);
+  const calc=useMemo(()=>calcAssets(d),[d]);
+  const mom=useMemo(()=>{   // 較上月成長：與上個月的紀錄比較
+    const t=new Date(), pm=t.getFullYear()===YEAR?t.getMonth():0, r=d.history.find(x=>x.m===pm);
+    const g=(cur,prev)=>(r&&prev)?(cur-prev)/prev*100:null;
+    return {total:g(calc.total,r&&r.total),cash:g(calc.cash,r&&r.cash),fixed:g(calc.fixed,r&&r.fixed),invest:g(calc.invest,r&&r.invest)};
+  },[d,calc]);
+  useEffect(()=>{ if(ready) setD(p=>snapMonthEnd(p)); },[ready,calc.total,calc.cash,calc.fixed,calc.invest]);
+  useEffect(()=>{ if(ready) setD(p=>archiveOldMonths(p)); },[ready,d.tx]);   // 月結：整理上月收支並清除明細
+
+  const saveTx=(t,id)=>setD(p=>id?{...p,tx:p.tx.map(x=>x.id===id?{...x,...t}:x)}:{...p,tx:[...p.tx,{...t,id:uid()}]});
+  const delTx=id=>setD(p=>({...p,tx:p.tx.filter(x=>x.id!==id)}));
+  const saveInvest=v=>{ const upd=confirm('已記錄。是否同步更新扣款銀行帳戶（從活存扣除）？');
+    setD(p=>{ let n=applyInvest(p,v,v.date,upd); if(v.rec) n={...n,recurring:[...(n.recurring||[]),{id:uid(),ticker:v.ticker,cur:v.cur,price:v.price,shares:v.shares,total:v.total,acct:v.acct,day:v.day,lastYM:v.date.slice(0,7)}]}; return n; }); };
+  const recDone=useRef(false);
+  useEffect(()=>{   // 定期定額：到期日提醒是否自動記載
+    if(!ready||recDone.current) return; recDone.current=true;
+    const ym=todayISO().slice(0,7), day=new Date().getDate();
+    (d.recurring||[]).forEach(r=>{ if(r.lastYM!==ym&&day>=r.day){
+      const ok=confirm(`定期定額提醒：本月 ${r.day} 號 ${r.ticker} 扣款，是否自動記載？`);
+      setD(p=>{ const n=ok?applyInvest(p,r,todayISO(),true):p; return {...n,recurring:n.recurring.map(x=>x.id===r.id?{...x,lastYM:ym}:x)}; }); } });
+  },[ready]);
+  const blank={date:todayISO(),type:'expense',cat:'餐飲',item:'',amt:0,note:''};
+
+  return (<div className="relative w-full max-w-[393px] mx-auto min-h-screen bg-white overflow-hidden" style={{paddingTop:'env(safe-area-inset-top,0px)'}}>
+    <header className="h-14 relative flex items-center justify-center mt-[19px]">
+      <button onClick={()=>setProfile(true)} className="absolute left-4 w-6 h-6 flex flex-col justify-center gap-[6px] px-[3px]" aria-label="選單"><i className="block h-0.5 bg-black w-4"/><i className="block h-0.5 bg-black w-3.5"/><i className="block h-0.5 bg-black w-4"/></button>
+      <h1 className="text-xl font-semibold leading-7 m-0">{d.profile&&d.profile.nick?d.profile.nick+'的錢錢💰':'錢錢💰'}</h1>
+      <div className="absolute bottom-0 inset-x-0 text-center text-[10px] leading-3 text-zinc-400">{sync}</div>
+      <button onClick={toggleHide} aria-label={hide?'顯示數字':'隱藏數字'} className="absolute right-4 w-6 h-6 flex items-center justify-center">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>{hide&&<path d="M3 3l18 18"/>}</svg>
+      </button>
+    </header>
+    {menu&&<div className="fixed inset-0 z-30" onClick={()=>setMenu(false)}>
+      <div className="absolute left-4 bg-white border border-neutral-200 rounded-lg shadow-lg p-2 text-sm" style={{top:'calc(env(safe-area-inset-top,0px) + 75px)'}} onClick={e=>e.stopPropagation()}>
+        {CONFIGURED&&auth.currentUser&&<div className="px-3 py-1 text-xs text-zinc-500">{auth.currentUser.email}</div>}
+        {CONFIGURED?<button onClick={()=>{setMenu(false);auth.signOut();}} className="px-3 py-2 w-full text-left font-medium">登出</button>:<div className="px-3 py-2 text-zinc-500">尚未設定 Firebase</div>}
+      </div></div>}
+    <nav className="flex gap-3 px-4 mt-3 overflow-x-auto no-sb">
+      {TABS.map((t,i)=><button key={t} onClick={()=>setTab(i)} className={`px-3.5 py-1.5 rounded-[20px] text-sm font-medium leading-5 transition-colors ${tab===i?'bg-black text-white':'bg-neutral-100 text-black'}`}>{t}</button>)}
+    </nav>
+    {!ready&&<div className="py-24 text-center text-sm text-zinc-500">載入中…</div>}
+    <main key={tab} style={{animation:'fade .18s ease-out',display:ready?'block':'none'}}>
+      {tab===0&&<PageMy d={d} setD={setD} fund={fund} c={calc} mom={mom}/>}
+      {tab===1&&<PageDetail d={d} setD={setD} c={calc} mom={mom}/>}
+      {tab===2&&<CalcCtx.Provider value={true}><PageGoals d={d} setD={setD} fund={fund}/></CalcCtx.Provider>}
+      {tab===3&&<PageLedger d={d} setD={setD} onEdit={t=>setTxForm({tx:t})} onInfo={setInfo}/>}
+    </main>
+    <button onClick={()=>ready&&setTxForm({})} aria-label="新增記帳" className="fixed z-20 w-12 h-12 rounded-full bg-black text-white text-2xl leading-none shadow-lg" style={{left:'max(16px,calc(50% - 180px))',bottom:'max(20px,env(safe-area-inset-bottom))'}}>+</button>
+    {txForm&&<TxForm init={txForm.tx||blank} accounts={d.accounts} onInvest={saveInvest} onSave={t=>saveTx(t,txForm.tx&&txForm.tx.id)} onDelete={txForm.tx?()=>delTx(txForm.tx.id):null} onClose={()=>setTxForm(null)}/>}
+    {info&&<Sheet title="記帳詳情" onClose={()=>setInfo(null)}>
+      <div className="text-sm leading-7">
+        <div>日期：{fmtDate(info.date)}</div><div>分類：{info.cat}</div><div>項目：{info.item}</div><div>金額：{fmt(info.amt)}</div>
+        <div className="whitespace-pre-wrap break-words">備註：{info.note||'（無）'}</div>
+      </div>
+    </Sheet>}
+    {profile&&<Sheet title="個人資訊" onClose={()=>setProfile(false)}><div className="flex flex-col gap-3">
+      <div><div className="text-xs text-zinc-500 mb-1">暱稱</div><Txt value={d.profile.nick} onChange={v=>setD(p=>({...p,profile:{...p.profile,nick:v}}))} ph="你的暱稱" className="h-10 w-full"/></div>
+      <div><div className="text-xs text-zinc-500 mb-1">生日（用來計算 FIRE 達成年齡）</div><DateBox clearable value={d.profile.birth} onChange={v=>setD(p=>({...p,profile:{...p.profile,birth:v}}))}/></div>
+      {CONFIGURED&&auth.currentUser&&<div className="text-xs text-zinc-500">{auth.currentUser.email}</div>}
+      <button onClick={()=>{if(confirm('清空所有資料（帳戶、記帳、目標、持股…）？此動作無法復原。')){setD(p=>({...mockData,profile:p.profile}));setProfile(false);}}} className="h-11 rounded-lg border border-neutral-200 text-sm font-medium text-red-600">清空所有資料</button>
+      {CONFIGURED&&<button onClick={()=>{setProfile(false);auth.signOut();}} className="h-11 rounded-lg border border-neutral-200 text-sm font-medium">登出</button>}
+    </div></Sheet>}
+    {calcCfg&&<CalcPad cfg={calcCfg} onClose={()=>setCalcCfg(null)}/>}
+    {CONFIGURED&&authState==='out'&&<LoginScreen/>}
+  </div>);
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

@@ -799,6 +799,8 @@ function PageDetail({d,setD,c}) {
   const doTrade=sp0=>{ const sp={...sp0,date:dateOrToday(sp0.date)}; const r=applyTrade(d,sp); if(r.err){alert(r.err);return false;} setD(p=>{const r2=applyTrade(p,sp);return r2.err?p:r2.p;}); return true; };
   const delTrade=(hid,tid)=>{ const r=removeTrade(d,hid,tid); if(r.err){alert(r.err);return;} if(!confirm('刪除這筆交易？若當時有動用銀行帳戶，餘額會一併回沖。')) return; setD(p=>{const r2=removeTrade(p,hid,tid);return r2.err?p:r2.p;}); };
   const allocated=sumBy(d.allocation,catTotal), salary=d.salary||0, bal=salary-allocated;
+  const catSum=names=>sumBy(d.allocation.filter(c=>names.includes(c.label)),catTotal);   // 收折摘要：開銷=必要+選擇；理財=投資理財+未來基金
+  const catBg=l=>l==='必要開銷'||l==='選擇消費'?'bg-black':l==='投資理財'?'bg-purple-600':l==='未來基金'?'bg-green-600':'bg-zinc-500';
   const base=salary>0?salary:allocated, pctOf=v=>base>0?Math.round(v/base*100)+'%':'—';
   const items=[{k:'美股',v:c.us,c:'#6d28d9'},{k:'台股',v:c.tw,c:'#a78bfa'},{k:'定存',v:c.td,c:'#15803d'},{k:'高利活存',v:c.hy,c:'#22c55e'},{k:'現金',v:c.demand,c:'#9ca3af'}];
   const R=120,cx=120,cy=120,tw=items.reduce((s,h)=>s+h.v,0); let a=Math.PI;
@@ -877,19 +879,22 @@ function PageDetail({d,setD,c}) {
     </Acc>
 
     <Card className={`mx-4 mt-6 ${sec.alloc?'pb-4':''}`}>
-      <div className="px-4 h-14 flex items-center gap-2 cursor-pointer" onClick={()=>tsec('alloc')}><div className="flex-1 text-sm font-semibold leading-5">現金分配</div><Btn onClick={e=>{e.stopPropagation();addCat();setSec(o=>({...o,alloc:true}));}}>＋ 新增</Btn><Chev open={sec.alloc}/></div>
+      <div className="px-4 h-14 flex items-center gap-2 cursor-pointer" onClick={()=>tsec('alloc')}><div className="flex-1 min-w-0"><div className="text-sm font-semibold leading-5">現金分配</div>{!sec.alloc&&<div className="text-[11px] text-zinc-500 leading-4 truncate">開銷 {fmt(catSum(['必要開銷','選擇消費']))}｜理財 {fmt(catSum(['投資理財','未來基金']))}</div>}</div><Btn onClick={e=>{e.stopPropagation();addCat();setSec(o=>({...o,alloc:true}));}}>＋ 新增</Btn><Chev open={sec.alloc}/></div>
       {sec.alloc&&<>
       <div className="px-4">
-        <div className="min-h-12 flex items-center gap-2"><span className="text-sm font-semibold flex-1">固定支配</span>{salEdit?<NumBox autoFocus value={salary} onChange={v=>setD(p=>({...p,salary:v}))} className="w-28 h-9 px-2 text-sm"/>:<Fit className="w-28 text-sm text-zinc-500">{fmt(salary)}</Fit>}
-          <button onClick={()=>setSalEdit(e=>!e)} aria-label="編輯固定支配" className="w-5 shrink-0 text-zinc-400">{salEdit?'✓':'✎'}</button></div>
-        <div className="flex items-center justify-between gap-3 py-1 text-xs text-zinc-500"><span>已分配金額</span><span>{fmt(allocated)}</span></div>
-        <div className="flex items-center justify-between gap-3 py-1 text-sm font-semibold"><span>餘額（固定支配 − 已分配）</span><span className={bal<0?'text-red-600':'text-green-700'}>{fmt(bal)}</span></div>
+        <div className="min-h-12 flex items-center gap-1 text-xs">
+          <div className="flex-1 min-w-0 text-center"><div className="text-[10px] text-zinc-400">固定分配</div><div className="flex items-center justify-center gap-1">{salEdit?<NumBox autoFocus value={salary} onChange={v=>setD(p=>({...p,salary:v}))} className="w-20 h-8 px-1 text-xs"/>:<Fit className="text-sm font-semibold">{fmt(salary)}</Fit>}<button onClick={()=>setSalEdit(e=>!e)} aria-label="編輯固定支配" className="shrink-0 text-zinc-400">{salEdit?'✓':'✎'}</button></div></div>
+          <span className="shrink-0 text-zinc-400">−</span>
+          <div className="flex-1 min-w-0 text-center"><div className="text-[10px] text-zinc-400">已分配</div><Fit className="text-sm font-semibold">{fmt(allocated)}</Fit></div>
+          <span className="shrink-0 text-zinc-400">=</span>
+          <div className="flex-1 min-w-0 text-center"><div className="text-[10px] text-zinc-400">餘額</div><Fit className={`text-sm font-semibold ${bal<0?'text-red-600':'text-green-700'}`}>{fmt(bal)}</Fit></div>
+        </div>
       </div>
       <div className="px-4 pt-3 flex flex-col">
         {d.allocation.map(cat=>(
           <div key={cat.id}>
             <div className="min-h-12 py-2 flex items-center gap-2 cursor-pointer min-w-0" onClick={()=>tog(cat.id)}>
-              <Fit className="max-w-[38%] px-4 py-2 bg-black text-white text-sm font-medium leading-5 rounded-tl-2xl rounded-tr-sm rounded-bl-2xl rounded-br-2xl">{cat.label}</Fit>
+              <Fit className={`max-w-[38%] px-4 py-2 ${catBg(cat.label)} text-white text-sm font-medium leading-5 rounded-tl-2xl rounded-tr-sm rounded-bl-2xl rounded-br-2xl`}>{cat.label}</Fit>
               <Chev open={open[cat.id]}/>
               <Fit className="flex-1 min-w-0 text-sm text-zinc-500">{fmt(catTotal(cat))}</Fit>
               <span className="w-10 text-right text-xs font-medium text-zinc-400">{pctOf(catTotal(cat))}</span>

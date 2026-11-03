@@ -138,11 +138,14 @@ const SCEN=[['cons','保守'],['mid','中性'],['opt','樂觀']];
 const fireCfg=d=>{const f=d.fire||{};return {...FIRE_DEF,...f,inc:{...FIRE_DEF.inc,...(f.inc||{})},mid:d.fireRet==null?5:d.fireRet};};
 // 實質報酬率 =（名目報酬 − 投資成本，賺錢的部分再扣稅費）後，再扣除通膨
 const realRet=(nom,cfg)=>{let n=nom-cfg.cost; if(n>0) n*=1-cfg.tax/100; return ((1+n/100)/(1+cfg.infl/100)-1)*100;};
-function fireAssets(d,c,cfg){   // 計入 FIRE 的資產：可勾選資產類別、排除緊急預備金、再扣掉短期用途資金
+function fireAssets(d,c,cfg){   // 計入 FIRE 的資產：勾選資產類別，再依「排除項目」扣除（緊急預備金、未來基金、短期用途資金）
   const inc=FIRE_ASSETS.reduce((s,[k])=>s+(cfg.inc[k]?c[k]:0),0);
   const safe=['demand','hy','td'].reduce((s,k)=>s+(cfg.inc[k]?c[k]:0),0);
-  const exEF=cfg.exEF?Math.min(c.ef||0,safe):0, short=Math.min(Math.max(0,cfg.shortAmt||0),Math.max(0,inc-exEF));
-  return {gross:inc,exEF,short,total:Math.max(0,inc-exEF-short)};
+  const exEF=cfg.exEF?Math.min(c.ef||0,safe):0; let rest=Math.max(0,inc-exEF);
+  const exFund=cfg.exFund?Math.min(sumBy(d.goals||[],g=>g.saved||0),rest):0; rest-=exFund;
+  const useShort=cfg.exShort!=null?cfg.exShort:(cfg.shortAmt||0)>0;   // 舊資料：有填金額就視為要排除
+  const short=useShort?Math.min(Math.max(0,cfg.shortAmt||0),rest):0;
+  return {gross:inc,exEF,exFund,short,total:Math.max(0,rest-short)};
 }
 function fireCalc(d,c,o={}){   // 雙軌 FIRE：Lean（必要開銷）/ Real（含娛樂與旅遊）；目標 = 年支出 ÷ 安全提領率，以「今日幣值」計算
   const cfg=fireCfg(d), A=fireAssets(d,c,cfg);
@@ -300,7 +303,6 @@ function applyInvest(p,v,date,upd){   // 每月記帳「投資」：記帳明細
   const t={id:uid(),date,type:'invest',cat:'投資',item:'買進 '+key,amt,note:v.note||`${key} ${v.cur}`};
   return {p:{...q,tx:[...q.tx,t]}};
 }
-// 每月最後一天開啟 App：自動記錄當月資產（當天重複開啟會更新為最新數字）
 // 月份一律以 'YYYY-MM' 儲存與識別（history[].ym、archive[].ym、tx[].date 開頭皆同格式）
 const ymOf=(y,m)=>`${y}-${String(m).padStart(2,'0')}`;
 const curYM=()=>{const t=new Date();return ymOf(t.getFullYear(),t.getMonth()+1);};
@@ -309,20 +311,30 @@ const ymYear=ym=>+String(ym).slice(0,4), ymMonth=ym=>+String(ym).slice(5,7);
 const ymLabel=ym=>`${ymYear(ym)} 年 ${ymMonth(ym)} 月`;
 const byYM=(a,b)=>a.ym<b.ym?-1:a.ym>b.ym?1:0;
 const putHist=(h,r)=>[...h.filter(x=>x.ym!==r.ym),r].sort(byYM);
-// 每月最後一天開啟 App：自動記錄當月資產（當天重複開啟會更新為最新數字）。年份取自實際日期，跨年自動延續
-function snapMonthEnd(p){
-  const t=new Date(), y=t.getFullYear(), m=t.getMonth()+1; if(t.getDate()!==new Date(y,m,0).getDate()) return p;
-  const ym=ymOf(y,m), c=calcAssets(p), old=p.history.find(x=>x.ym===ym);
-  if(old&&old.total===c.total&&old.cash===c.cash&&old.fixed===c.fixed&&old.invest===c.invest) return p;
-  return {...p,history:putHist(p.history,{ym,total:c.total,cash:c.cash,fixed:c.fixed,invest:c.invest})};
+// 每月第一次開啟 App：詢問是否「自動記載上個月資產」；同意後以目前資產直接記入管理紀錄（history），每月只問一次（snapAsked）
+const needSnapAsk=(p,now)=>p.snapAsked!==now&&!p.history.some(r=>r.ym===prevYM(now))&&calcAssets(p).total>0;
+function snapPrevMonth(p,now,doIt){
+  const n={...p,snapAsked:now};
+  if(doIt){ const c=calcAssets(p); n.history=putHist(p.history,{ym:prevYM(now),total:c.total,cash:c.cash,fixed:c.fixed,invest:c.invest}); }
+  return n;
 }
 
 /* ============ 日期 / 月結 / 資料升級 ============ */
 const pad=n=>String(n).padStart(2,'0');
 const todayISO=()=>{const t=new Date();return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;};
 const dateOrToday=v=>v||todayISO();   // 必填日期（記帳、股票交易）：清空 → 儲存時一律使用今天
+const fmtMD=iso=>String(iso||'').slice(5).replace('-','/');   // 11/03
 const fmtDate=iso=>String(iso||'').replace(/-/g,'/');   // 統一「年/月/日」
 // 每月結束後（進入新月份時）：把舊月份的收支整理成「N月收支紀錄」，並清除明細
+// 投資不再手動記帳：每月投資 = 股票持股「本月買進」（台幣，含手續費；有動用銀行時取實際扣款）
+// 另外保留「舊版投資記帳」中沒有對應到持股買進的金額，避免舊資料變少；已對應到持股買進的不重複計算
+const invLinked=(p,t)=>{ const key=String(t.item||'').replace(/^買進\s*/,'').trim().toUpperCase(); return (p.holdings||[]).some(h=>h.ticker===key&&h.trades.some(x=>x.type==='buy'&&x.date===t.date)); };
+const buyTWD=(p,h,t)=>{ if(t.cashT!=null) return -t.cashT; const g=t.shares*t.price+(t.fee||0); return Math.round((h.cur==='USD'?g*(p.fx||32):g)*100)/100; };
+function monthInvest(p,ym){
+  let v=0; (p.holdings||[]).forEach(h=>h.trades.forEach(t=>{ if(t.type==='buy'&&t.date.slice(0,7)===ym) v+=buyTWD(p,h,t); }));
+  (p.tx||[]).forEach(t=>{ if(t.type==='invest'&&t.date.slice(0,7)===ym&&!invLinked(p,t)) v+=t.amt; });
+  return v;
+}
 function archiveOldMonths(p){
   const now=todayISO().slice(0,7), old=p.tx.filter(t=>t.date.slice(0,7)<now);
   if(!old.length) return p;
@@ -331,7 +343,8 @@ function archiveOldMonths(p){
   Object.entries(g).forEach(([ym,list])=>{
     const ex=arch.find(a=>a.ym===ym)||{ym,income:0,expense:0,inc:{},exp:{}};
     const n={ym,income:ex.income,expense:ex.expense,invest:ex.invest||0,inc:{...ex.inc},exp:{...ex.exp},tx:[...(ex.tx||[])]};
-    list.forEach(t=>{if(t.type==='invest') n.invest+=t.amt; else {const o=t.type==='income'?n.inc:n.exp;o[t.cat]=(o[t.cat]||0)+t.amt;if(t.type==='income')n.income+=t.amt;else n.expense+=t.amt;} n.tx.push(t);});
+    list.forEach(t=>{if(t.type!=='invest'){const o=t.type==='income'?n.inc:n.exp;o[t.cat]=(o[t.cat]||0)+t.amt;if(t.type==='income')n.income+=t.amt;else n.expense+=t.amt;} n.tx.push(t);});
+    n.invest=Math.max(ex.invest||0,monthInvest(p,ym));   // 該月投資 = 持股本月買進（不低於原本已封存的數字）
     arch=[...arch.filter(a=>a.ym!==ym),n];
   });
   return {...p,tx:p.tx.filter(t=>t.date.slice(0,7)>=now),archive:arch.sort((a,b)=>b.ym.localeCompare(a.ym))};
@@ -462,14 +475,14 @@ function CalcPad({cfg,onClose}) {
 const Bar=({pct,color='bg-green-500'})=><div className="h-2 rounded-full bg-neutral-100 mt-2.5 overflow-hidden"><div className={`h-full ${color}`} style={{width:Math.min(100,pct)+'%'}}/></div>;
 function FireCard({d,c,onClick}) {
   const f=fireCalc(d,c), sn=(SCEN.find(x=>x[0]===f.scen)||SCEN[1])[1], cf=f.cfg;
-  const row=(name,sub,t,color)=>{ let tx;
+  const row=(name,sub,t,color,first)=>{ let tx;   // 字體規格與「未來基金」卡片相同
     if(t.target<=0) tx='尚未設定'; else if(t.months==null) tx='無法達成'; else if(t.months===0) tx='已達成';
     else {const dt=addMonths(t.months),age=ageAt(d,dt); tx=`預計 ${dt.getFullYear()} 年${age!=null?`（${age}歲）`:''}`;}
-    return (<div className="mt-6"><div className="flex items-baseline justify-between gap-2"><Fit className="flex-1 min-w-0 text-base font-semibold leading-8">{name}<span className="font-normal text-zinc-400">{sub}</span></Fit><Fit className="text-sm text-zinc-500 leading-8 max-w-[40%]">目標 {fmt(t.target)}</Fit></div>
-      <Fit className="text-lg font-semibold leading-9 mt-1.5">達成率 {t.pct.toFixed(2)}%｜{tx}</Fit><Bar pct={t.pct} color={color}/></div>); };
-  const strip=(name,k)=><Fit className="text-[11px] text-zinc-600 mt-1">{name}：{SCEN.map(([key,l])=>`${l} ${fireWhen(f.sc[key][k],d).replace(/（.*）/,'')}`).join('｜')}</Fit>;
-  return (<Card className="p-4 cursor-pointer" onClick={onClick}><div className="flex items-baseline justify-between gap-2"><span className="text-sm font-semibold">FIRE 倒數計時</span><span className="text-[11px] text-zinc-500">{sn}情境</span></div>
-    {row('Lean FIRE ','(僅必要開銷)',f.lean,'bg-green-500')}{row('Real FIRE ','',f.real,'bg-blue-500')}
+    return (<div className={first?'mt-3':'mt-4'}><div className="flex items-baseline justify-between gap-2"><span className="text-sm font-semibold">{name}<span className="font-normal text-zinc-400">{sub}</span></span><Fit className="text-xs text-zinc-500 max-w-[55%]">目標 {fmt(t.target)}</Fit></div>
+      <Fit className="text-sm font-semibold mt-2">達成率 {t.pct.toFixed(2)}%｜{tx}</Fit><Bar pct={t.pct} color={color}/></div>); };
+  const strip=(name,k)=><div className="text-xs text-zinc-600 mt-1 whitespace-normal leading-5">{name}：{SCEN.map(([key,l])=>`${l} ${fireWhen(f.sc[key][k],d).replace(/（.*）/,'')}`).join('｜')}</div>;
+  return (<Card className="p-4 cursor-pointer" onClick={onClick}><div className="flex items-baseline justify-between gap-2"><span className="text-sm font-semibold">FIRE 倒數計時</span><span className="text-xs text-zinc-500">{sn}情境</span></div>
+    {row('Lean FIRE ','(僅必要開銷)',f.lean,'bg-green-500',true)}{row('Real FIRE ','',f.real,'bg-blue-500')}
     <div className="mt-3 pt-2 border-t-[0.5px] border-neutral-200">{strip('Lean','lean')}{strip('Real','real')}</div>
     <div className="text-[10px] text-zinc-500 mt-2 whitespace-normal leading-4">假設：名目報酬 {f.ret}% → 扣除成本 {cf.cost}%、稅費 {cf.tax}% 與通膨 {cf.infl}% 後，實質報酬約 {f.rr.toFixed(1)}%；目標 = 年支出 ÷ {cf.swr}%，以今日幣值計算；每月投入與獎金為固定名目金額，會依通膨折算。計入資產 {fmt(f.assets.total)}{f.assets.total!==c.total?`（總資產 ${fmt(c.total)}）`:''}。</div>
     <div className="text-[10px] text-zinc-400 mt-1">點按卡片可切換情境、設定假設與納入資產</div></Card>);
@@ -518,7 +531,7 @@ function RecSheet({d,setD,onClose}) {
   </Sheet>);
 }
 function PageMy({d,setD,fund,c,mom}) {
-  const [rec,setRec]=useState(false), [tip,setTip]=useState(null), [sheet,setSheet]=useState(null), [yrSel,setYrSel]=useState(null);
+  const [rec,setRec]=useState(false), [tip,setTip]=useState(null), [sheet,setSheet]=useState(null), [yrSel,setYrSel]=useState(null), [fEdit,setFEdit]=useState(false);
   const pct=v=>c.total>0?(v/c.total*100).toFixed(1)+'%':'—', f=fireCalc(d,c);
   const cards=[['總資產',fmt(c.total),null,'較上月 '+fmtPct(mom.total),null],
     ['現金',fmt(c.cash),pct(c.cash),fmtPct(mom.cash),'cash'],
@@ -590,33 +603,40 @@ function PageMy({d,setD,fund,c,mom}) {
         {!hs2.length&&<div className="text-xs text-zinc-400 py-1.5">尚無持股</div>}</div>);})}
     </Sheet>}
     {sheet==='fire'&&(()=>{ const cf=f.cfg, A=f.assets, setF=patch=>setD(p=>({...p,fire:{...(p.fire||{}),...patch}})); const cv={demand:c.demand,hy:c.hy,td:c.td,us:c.us,tw:c.tw};
-      return <Sheet title="FIRE 設定" onClose={()=>setSheet(null)}>
+      const fundSaved=sumBy(d.goals||[],g=>g.saved||0), useShort=cf.exShort!=null?cf.exShort:(cf.shortAmt||0)>0;
+      const Ex=({on,onChange,label,right})=><label className="flex items-center justify-between gap-2 py-1.5 text-sm"><span className="flex items-center gap-2"><input type="checkbox" className="accent-red-500" checked={!!on} onChange={e=>onChange(e.target.checked)}/>{label}</span>{right}</label>;
+      return <Sheet title="FIRE 設定" onClose={()=>{setSheet(null);setFEdit(false);}}>
       <div className="text-xs text-zinc-500 whitespace-normal leading-5 mb-2">FIRE 目標 = 年支出 ÷ 安全提領率，以今日幣值計算。報酬以實質年化報酬率複利；每月投入與年獎金視為固定名目金額，會依通膨折算成今日幣值後才加入。Lean 只算必要開銷；Real 含選擇消費（娛樂、旅遊等）。</div>
-      <div className="text-sm font-semibold mt-1">情境</div>
+      <div className="flex items-center justify-between mt-1"><div className="text-sm font-semibold">情境</div><Btn onClick={()=>setFEdit(v=>!v)}>{fEdit?'完成':'編輯'}</Btn></div>
       <div className="flex gap-2 mt-1.5">{SCEN.map(([k,l])=><Btn key={k} gray={f.scen===k} onClick={()=>setF({scen:k})}>{l}</Btn>)}</div>
       <div className="mt-2 border border-neutral-200 rounded-lg overflow-hidden text-xs">
         <div className="grid grid-cols-[3.2em_1fr_1fr_1fr] gap-1 px-2 py-1.5 bg-neutral-50 text-zinc-500"><span/><span className="text-right">名目</span><span className="text-right">實質</span><span className="text-right">Real 達成</span></div>
         {SCEN.map(([k,l])=><div key={k} className={`grid grid-cols-[3.2em_1fr_1fr_1fr] gap-1 px-2 py-1.5 border-t-[0.5px] border-neutral-200 ${f.scen===k?'font-semibold':''}`}><span>{l}</span><span className="text-right">{f.sc[k].nom}%</span><span className="text-right">{f.sc[k].rr.toFixed(1)}%</span><span className="text-right truncate">{fireWhen(f.sc[k].real,d).replace(/（.*）/,'')}</span></div>)}
       </div>
-      <div className="text-sm font-semibold mt-4">報酬率與假設</div>
-      <Num label="保守 年化報酬率 %（名目）" value={cf.cons} dec={1} onChange={v=>setF({cons:v})}/>
-      <Num label="中性 年化報酬率 %（名目）" value={cf.mid} dec={1} onChange={v=>setD(p=>({...p,fireRet:v}))}/>
-      <Num label="樂觀 年化報酬率 %（名目）" value={cf.opt} dec={1} onChange={v=>setF({opt:v})}/>
-      <Num label="通膨率 % / 年" value={cf.infl} dec={1} onChange={v=>setF({infl:v})}/>
-      <Num label="投資成本 % / 年（基金費用、交易成本）" value={cf.cost} dec={2} onChange={v=>setF({cost:v})}/>
-      <Num label="稅費 %（佔投資獲利的比例）" value={cf.tax} dec={1} onChange={v=>setF({tax:v})}/>
-      <Num label="安全提領率 %" value={cf.swr} dec={1} onChange={v=>setF({swr:v})}/>
-      <div className="text-[11px] text-zinc-400 whitespace-normal leading-4 mt-1">實質報酬 =（名目報酬 − 投資成本，獲利部分再扣稅費）後扣除通膨。以上都是假設值，請依自己的投資內容與稅務情況調整；實際報酬不保證。</div>
+      {fEdit&&<>
+        <div className="text-sm font-semibold mt-4">報酬率與假設</div>
+        <Num label="保守 年化報酬率 %（名目）" value={cf.cons} dec={1} onChange={v=>setF({cons:v})}/>
+        <Num label="中性 年化報酬率 %（名目）" value={cf.mid} dec={1} onChange={v=>setD(p=>({...p,fireRet:v}))}/>
+        <Num label="樂觀 年化報酬率 %（名目）" value={cf.opt} dec={1} onChange={v=>setF({opt:v})}/>
+        <Num label="通膨率 % / 年" value={cf.infl} dec={1} onChange={v=>setF({infl:v})}/>
+        <Num label="投資成本 % / 年（基金費用、交易成本）" value={cf.cost} dec={2} onChange={v=>setF({cost:v})}/>
+        <Num label="稅費 %（佔投資獲利的比例）" value={cf.tax} dec={1} onChange={v=>setF({tax:v})}/>
+        <Num label="安全提領率 %" value={cf.swr} dec={1} onChange={v=>setF({swr:v})}/>
+        <div className="text-[11px] text-zinc-400 whitespace-normal leading-4 mt-1">實質報酬 =（名目報酬 − 投資成本，獲利部分再扣稅費）後扣除通膨。以上都是假設值，請依自己的投資內容與稅務情況調整；實際報酬不保證。</div>
+      </>}
       <div className="text-sm font-semibold mt-4">年支出</div>
       <Row l="Lean 年支出（必要開銷 × 12）" v={f.ess*12}/>
       <Num label="Real 年支出" value={Math.round(f.realYear)} onChange={v=>setF({realYear:v})}/>
       <div className="mt-1"><Btn onClick={()=>setF({realYear:null})}>Real 年支出還原預設</Btn></div>
       <div className="text-sm font-semibold mt-4">計入 FIRE 的資產</div>
       {FIRE_ASSETS.map(([k,l])=><label key={k} className="flex items-center justify-between gap-2 py-1.5 text-sm"><span className="flex items-center gap-2"><input type="checkbox" checked={!!cf.inc[k]} onChange={e=>setF({inc:{...cf.inc,[k]:e.target.checked}})}/>{l}</span><span className="text-zinc-600">{fmt(cv[k])}</span></label>)}
-      <label className="flex items-center justify-between gap-2 py-1.5 text-sm"><span className="flex items-center gap-2"><input type="checkbox" checked={!!cf.exEF} onChange={e=>setF({exEF:e.target.checked})}/>排除緊急預備金</span><span className="text-zinc-600">{fmt(c.ef||0)}</span></label>
-      <Num label="排除短期用途資金（購屋頭期款等）" value={cf.shortAmt||0} onChange={v=>setF({shortAmt:v})}/>
-      <div className="flex justify-between text-sm font-semibold pt-2 border-t-[0.5px] border-neutral-200 mt-1"><span>計入 FIRE 的資產</span><span>{fmt(A.total)}</span></div>
-      <div className="text-[11px] text-zinc-400 whitespace-normal leading-4 mt-1">原選取 {fmt(A.gross)}{A.exEF>0?`，扣除緊急預備金 ${fmt(A.exEF)}`:''}{A.short>0?`，扣除短期用途 ${fmt(A.short)}`:''}。預設全部計入；準備近期要用的錢可以排除，讓進度更貼近真實的退休資產。</div>
+      <div className="border-t-[0.5px] border-neutral-300 my-3"/>
+      <div className="text-sm font-semibold">排除項目</div>
+      <Ex on={cf.exEF} onChange={v=>setF({exEF:v})} label="排除緊急預備金" right={<span className="text-zinc-600">{fmt(c.ef||0)}</span>}/>
+      <Ex on={cf.exFund} onChange={v=>setF({exFund:v})} label="排除未來基金" right={<span className="text-zinc-600">{fmt(fundSaved)}</span>}/>
+      <Ex on={useShort} onChange={v=>setF({exShort:v})} label="排除短期用途資金" right={<NumBox value={cf.shortAmt||0} onChange={v=>setF({shortAmt:v})} className="w-32 h-9 px-3 text-sm"/>}/>
+      <div className="flex justify-between text-sm font-semibold pt-2 border-t-[0.5px] border-neutral-200 mt-2"><span>計入 FIRE 的資產</span><span>{fmt(A.total)}</span></div>
+      <div className="text-[11px] text-zinc-400 whitespace-normal leading-4 mt-1">原選取 {fmt(A.gross)}{A.exEF>0?`，扣除緊急預備金 ${fmt(A.exEF)}`:''}{A.exFund>0?`，扣除未來基金 ${fmt(A.exFund)}`:''}{A.short>0?`，扣除短期用途資金 ${fmt(A.short)}`:''}。</div>
     </Sheet>; })()}
   </div>);
 }
@@ -667,11 +687,39 @@ function StockForm({kind,d,hid,onSubmit,onClose}) {
     <SaveBtn disabled={!ready||!!err} onClick={()=>{if(onSubmit(spec)!==false)onClose();}}/>
   </div></Sheet>);
 }
-function DateBox({value,onChange,className='h-10 w-full px-3 text-sm',clearable=true,required}) {   // required：必填欄位，清空時顯示「儲存時使用今天」   // 點擊跳出日期選擇器，顯示成 2027/03/27
-  return (<div className={`relative rounded-lg border border-neutral-200 bg-white flex items-center justify-center ${className}`}>
+function DatePicker({value,onPick,onClose,clearable}) {   // 自訂日期選擇器：選日期、「清除」變空白、「今天」
+  const t0=new Date(), init=value&&/^\d{4}-\d{2}-\d{2}$/.test(value)?value:todayISO();
+  const [vy,setVy]=useState(+init.slice(0,4)), [vm,setVm]=useState(+init.slice(5,7));
+  const first=new Date(vy,vm-1,1).getDay(), n=new Date(vy,vm,0).getDate(), today=todayISO();
+  const cells=[...Array(first).fill(null),...Array.from({length:n},(_,k)=>k+1)];
+  const go=dm=>{ let m=vm+dm,y=vy; if(m<1){m=12;y--;} if(m>12){m=1;y++;} setVy(y); setVm(m); };
+  const years=[]; for(let y=Math.min(1920,vy);y<=Math.max(t0.getFullYear()+30,vy);y++) years.push(y);
+  const sel="h-9 rounded-lg border border-neutral-200 bg-white px-2 text-base";
+  const stop=e=>e.stopPropagation();
+  return ReactDOM.createPortal(<div className="fixed inset-0 z-50 bg-black/30 flex items-end justify-center px-3" style={{paddingBottom:'calc(38px + env(safe-area-inset-bottom,0px))'}} onClick={e=>{stop(e);onClose();}}>
+    <div className="bg-white w-full max-w-[393px] rounded-2xl p-5" onClick={stop}>
+      <div className="flex items-center justify-between mb-3"><div className="text-base font-semibold">選擇日期</div><button type="button" onClick={onClose} className="text-sm text-zinc-500">關閉</button></div>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <button type="button" onClick={()=>go(-1)} aria-label="上個月" className="w-9 h-9 rounded-lg border border-neutral-200 text-lg leading-none">‹</button>
+        <div className="flex gap-2"><select value={vy} onChange={e=>setVy(+e.target.value)} className={sel}>{years.map(y=><option key={y} value={y}>{y} 年</option>)}</select>
+          <select value={vm} onChange={e=>setVm(+e.target.value)} className={sel}>{Array.from({length:12},(_,k)=><option key={k+1} value={k+1}>{k+1} 月</option>)}</select></div>
+        <button type="button" onClick={()=>go(1)} aria-label="下個月" className="w-9 h-9 rounded-lg border border-neutral-200 text-lg leading-none">›</button>
+      </div>
+      <div className="grid grid-cols-7 text-center text-xs text-zinc-400 mb-1">{['日','一','二','三','四','五','六'].map(w=><span key={w} className="py-1">{w}</span>)}</div>
+      <div className="grid grid-cols-7 gap-y-1">{cells.map((dd,k)=>{ if(dd==null) return <span key={'e'+k}/>; const iso=`${vy}-${pad(vm)}-${pad(dd)}`, on=iso===value;
+        return <button type="button" key={dd} onClick={()=>onPick(iso)} className={`h-9 mx-auto w-9 rounded-full text-sm ${on?'bg-black text-white font-semibold':iso===today?'border border-black':''}`}>{dd}</button>; })}</div>
+      <div className="flex gap-2 mt-3">
+        <button type="button" onClick={()=>onPick(today)} className="flex-1 h-10 rounded-lg border border-neutral-200 text-sm font-medium">今天</button>
+        {clearable&&<button type="button" onClick={()=>onPick('')} className="flex-1 h-10 rounded-lg border border-neutral-200 text-sm font-medium text-red-600">清除</button>}
+      </div>
+    </div></div>,document.body);
+}
+function DateBox({value,onChange,className='h-10 w-full px-3 text-sm',clearable=true,required}) {   // 點擊跳出日期選擇器，顯示成 2027/03/27；required：必填欄位，清空時顯示「儲存時使用今天」
+  const [open,setOpen]=useState(false);
+  return (<div onClick={()=>setOpen(true)} className={`relative rounded-lg border border-neutral-200 bg-white flex items-center justify-center cursor-pointer ${className}`}>
     {value?<span>{value.replace(/-/g,'/')}</span>:<span className="text-zinc-400 truncate">{required?`未選擇・儲存時使用今天 ${fmtDate(todayISO())}`:'選擇日期（可留空）'}</span>}
-    <input type="date" value={value||''} onChange={e=>onChange(e.target.value||'')} onClick={e=>{try{e.currentTarget.showPicker&&e.currentTarget.showPicker();}catch(x){}}} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"/>
-    {clearable&&value&&<button onClick={e=>{e.stopPropagation();onChange('');}} aria-label="清除" className="absolute right-1.5 z-10 text-xs text-zinc-400">✕</button>}
+    {clearable&&value&&<button type="button" onClick={e=>{e.stopPropagation();onChange('');}} aria-label="清除" className="absolute right-1.5 z-10 text-xs text-zinc-400">✕</button>}
+    {open&&<DatePicker value={value} clearable={clearable} onClose={()=>setOpen(false)} onPick={v=>{onChange(v||'');setOpen(false);}}/>}
   </div>);
 }
 function MonthBox({value,onChange}) {   // 到期日：2026/10
@@ -1036,7 +1084,7 @@ function PageLedger({d,setD,onEdit,onInfo}) {
   const ym=todayISO().slice(0,7);            // 統計期間：本月 1 日～最後一日
   const cur=d.tx.filter(t=>t.date.slice(0,7)===ym).sort((a,b)=>a.date.localeCompare(b.date));
   const inc=cur.filter(t=>t.type==='income'), exp=cur.filter(t=>t.type==='expense');
-  const tI=sumBy(inc,t=>t.amt), tE=sumBy(exp,t=>t.amt), tV=sumBy(cur.filter(t=>t.type==='invest'),t=>t.amt);
+  const tI=sumBy(inc,t=>t.amt), tE=sumBy(exp,t=>t.amt), tV=monthInvest(d,ym);   // 本月投資 = 股票持股「本月買進」
   const by=(list,cats,tot)=>cats.map(c=>{const v=list.filter(t=>t.cat===c).reduce((s,t)=>s+t.amt,0);return {c,v,p:tot?Math.round(v/tot*100):0};});
   const iRows=by(inc,INCOME_CATS,tI);
   const eRows=by(exp,EXPENSE_CATS,tE).sort((a,b)=>b.v-a.v).slice(0,5);
@@ -1045,22 +1093,22 @@ function PageLedger({d,setD,onEdit,onInfo}) {
       {rows.map(r=><div key={r.c} className="grid grid-cols-[3.4em_1fr_30px] gap-2 h-[25px] items-center text-xs">
         <Fit className="font-semibold">{r.c}</Fit><Fit className="font-medium text-zinc-500 min-w-0">{r.v?fmt(r.v):'-'}</Fit><span className="font-medium text-zinc-500 text-right">{r.v?r.p+'%':'-'}</span></div>)}
     </Card>);
-  const RC='grid grid-cols-[8px_70px_46px_1fr_62px_24px] gap-2 px-2.5 items-center';
+  const RC='relative grid grid-cols-[44px_1fr_1fr_2fr_28px] gap-2 px-2.5 items-center';   // 日期｜分類｜項目（等寬）｜金額（最寬）｜備註（最右）
   return (<div className="px-4 pt-[17px] flex flex-col gap-3">
-    <Card className="h-[102px] px-4 grid grid-cols-3 gap-2 items-center">
+    <Card className="h-[102px] px-2 grid grid-cols-3 gap-2 items-center text-center">
       <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月總收入</div><Fit className="text-lg font-semibold leading-8 text-green-700 mt-2">{fmt(tI)}</Fit></div>
       <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月總支出</div><Fit className="text-lg font-semibold leading-8 text-red-600 mt-2">{fmt(tE)}</Fit></div>
       <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月投資</div><Fit className="text-lg font-semibold leading-8 text-purple-600 mt-2">{fmt(tV)}</Fit></div>
     </Card>
     <div className="flex gap-3"><Stat title="收入統計" color="text-green-700" rows={iRows}/><Stat title="支出統計" color="text-red-600" rows={eRows}/></div>
     <div className="mt-2">
-      <div className={`${RC} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span/><span className="text-center">日期</span><span>分類</span><span>項目</span><span>金額</span><span>備註</span></div>
+      <div className={`${RC} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span className="text-center">日期</span><span className="text-center">分類</span><span className="text-center">項目</span><span className="text-center">金額</span><span className="text-center">備註</span></div>
       {!cur.length&&<div className="text-xs text-zinc-400 text-center py-6">本月尚無收支，按下方「+」新增</div>}
       {cur.map(t=>(
         <SwipeRow key={t.id} open={openId&&openId.id===t.id?openId.side:null} onOpen={side=>setOpenId({id:t.id,side})} onClose={()=>setOpenId(null)} onEdit={()=>{setOpenId(null);onEdit(t);}}>
           <div className={`${RC} h-[37px] text-xs font-medium`}>
-            <i className={`w-[5px] h-[5px] rounded-full ${t.type==='income'?'bg-green-500':t.type==='invest'?'bg-purple-500':'bg-red-500'}`}/>
-            <Fit className="min-w-0 text-center">{fmtDate(t.date)}</Fit><Fit className="min-w-0">{t.cat}</Fit><Fit className="min-w-0">{t.item}</Fit><Fit className="min-w-0">{fmt(t.amt)}</Fit>
+            <i className={`absolute left-[2px] top-1/2 -translate-y-1/2 w-[5px] h-[5px] rounded-full ${t.type==='income'?'bg-green-500':t.type==='invest'?'bg-purple-500':'bg-red-500'}`}/>
+            <Fit className="min-w-0 text-center">{fmtMD(t.date)}</Fit><Fit className="min-w-0">{t.cat}</Fit><Fit className="min-w-0">{t.item}</Fit><Fit className="min-w-0">{fmt(t.amt)}</Fit>
             <button onClick={e=>{e.stopPropagation();onInfo(t);}} aria-label="備註" className={`w-4 h-4 rounded-full text-white text-[11px] font-bold flex items-center justify-center ${t.note?'bg-blue-500':'bg-neutral-300'}`}>i</button>
           </div>
         </SwipeRow>))}
@@ -1089,7 +1137,7 @@ function TxForm({init,accounts,onSave,onInvest,onDelete,onClose}) {
   const save=()=>{ const dt=dateOrToday(date); if(isInv){ if(onInvest({date:dt,ticker:ticker.trim(),cur,price,shares,total,acct,rec,day,note})===false) return; } else onSave({date:dt,type,cat,item:item.trim()||cat,amt,note}); onClose(); };
   return (<Sheet title={onDelete?'編輯記帳':'新增記帳'} onClose={onClose}>
     <div className="flex flex-col gap-3">
-      <div className="flex gap-2">{[['expense','支出','#ef4444'],['income','收入','#22c55e'],['invest','投資','#7c3aed']].map(([k,l,col])=><Pill key={k} full on={type===k} color={col} tc="#fff" onClick={()=>pick(k)}>{l}</Pill>)}</div>
+      <div className="flex gap-2">{[['expense','支出','#ef4444'],['income','收入','#22c55e'],['invest','投資','#7c3aed']].filter(x=>x[0]!=='invest'||init.type==='invest').map(([k,l,col])=><Pill key={k} full on={type===k} color={col} tc="#fff" onClick={()=>pick(k)}>{l}</Pill>)}</div>
       <div><div className="text-xs text-zinc-500 mb-1">日期</div><DateBox required value={date} onChange={setDate}/><div className="text-[10px] text-zinc-400 mt-1">日期為必填；清空後儲存時會使用今天</div></div>
       {!isInv&&<select value={cat} onChange={e=>setCat(e.target.value)} className={sel}>{cats.map(c=><option key={c}>{c}</option>)}</select>}
       {isInv?<>
@@ -1273,7 +1321,13 @@ function App() {
     const g=(cur,prev)=>(r&&prev)?(cur-prev)/prev*100:null;
     return {total:g(calc.total,r&&r.total),cash:g(calc.cash,r&&r.cash),fixed:g(calc.fixed,r&&r.fixed),invest:g(calc.invest,r&&r.invest)};
   },[d,calc]);
-  useEffect(()=>{ if(ready) setD(p=>snapMonthEnd(p)); },[ready,calc.total,calc.cash,calc.fixed,calc.invest]);
+  const snapDone=useRef(false);
+  useEffect(()=>{   // 每月第一次開啟：跳出「是否自動記載 N 月資產」
+    if(!ready||snapDone.current) return; snapDone.current=true;
+    const now=curYM(); if(!needSnapAsk(dRef.current,now)) return;
+    const ok=confirm(`是否自動記載${ymMonth(prevYM(now))}月資產？`);
+    setD(p=>snapPrevMonth(p,now,ok));
+  },[ready]);
   useEffect(()=>{ if(ready) setD(p=>archiveOldMonths(p)); },[ready,d.tx]);   // 月結：整理上月收支並清除明細
 
   const saveTx=(t0,id)=>{ const t={...t0,date:dateOrToday(t0.date)}; setD(p=>id?{...p,tx:p.tx.map(x=>x.id===id?{...x,...t}:x)}:{...p,tx:[...p.tx,{...t,id:uid()}]}); };

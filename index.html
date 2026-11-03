@@ -146,11 +146,13 @@ function goalAlloc(d){ const act=[...(d.goals||[])].filter(g=>!g.done).sort(goal
   act.forEach(g=>{ const a=Math.min(left,Math.max(0,g.budget||0)); al[g.id]=a; left-=a; }); return {act,al,pool,left}; }
 const goalMonths=g=>{ if(!g||!/^\d{4}-\d{2}-\d{2}$/.test(g.date||'')) return null; const t=new Date(); const m=(+g.date.slice(0,4)-t.getFullYear())*12+(+g.date.slice(5,7)-(t.getMonth()+1)); return m>=1&&m<=1200?m:null; };
 function goalPlan(d,cfg){
-  const A=goalAlloc(d), contrib=catOf(d,'未來基金')+(cfg.noBonus?0:bonusInto(d,'未來基金')/12);
+  const A=goalAlloc(d), base=catOf(d,'未來基金'), cm=new Date().getMonth()+1;   // 每月分配 + 獎金在「入帳月」一次進池子（每年重複）
+  const lump=t=>cfg.noBonus?0:sumBy(d.bonuses||[],b=>(((cm-1+t)%12)+1)===+b.month?sumBy((b.inj||[]).filter(i=>i.cat==='未來基金'),i=>b.amt*(i.ratio||0)/100):0);
+  const contrib=base+(cfg.noBonus?0:bonusInto(d,'未來基金')/12);   // 平均值：只給舊的總覽用
   const rem={}, info={}; let dated=0;
   A.act.forEach(g=>{ rem[g.id]=Math.max(0,(g.budget||0)-(A.al[g.id]||0)); const m=goalMonths(g); if(m!=null){ info[g.id]={g,m,sched:new Array(m+1).fill(0)}; dated+=A.al[g.id]||0; } });
   const maxM=Math.max(0,...Object.values(info).map(x=>x.m));
-  if(contrib>0) for(let t=1;t<=maxM;t++){ let amt=contrib;   // 每月新存入的錢，也依 優先級→日期 依序填滿；已到期支付的目標不再收錢
+  if(base>0||(!cfg.noBonus&&bonusInto(d,'未來基金')>0)) for(let t=1;t<=maxM;t++){ let amt=base+lump(t);   // 每月新存入的錢，也依 優先級→日期 依序填滿；已到期支付的目標不再收錢
     for(const g of A.act){ if(amt<=0) break; if(!(rem[g.id]>0)) continue; const x=info[g.id]; if(x&&t>x.m) continue;
       const give=Math.min(rem[g.id],amt); rem[g.id]-=give; amt-=give; if(x) x.sched[t]+=give; } }
   const parts=A.act.filter(g=>info[g.id]).map(g=>({id:g.id,name:g.name,date:g.date,m:info[g.id].m,out:g.budget||0,place:g.place==='invest'?'invest':'cash',saved:A.al[g.id]||0,sched:info[g.id].sched}));
@@ -162,7 +164,7 @@ const goalFV=(saved,sched,m,ratePct)=>{ const r=Math.pow(1+ratePct/100,1/12)-1; 
 function goalInfo(d,cfg,depR){   // 每個目標的狀態：ready 現在已可達成｜onTrack 到期前可達成｜short 預估不足｜nodate 未填日期｜due 已到期
   const plan=goalPlan(d,cfg), out={};
   plan.A.act.forEach(g=>{ const a=plan.A.al[g.id]||0, bud=g.budget||0, m=goalMonths(g), pl=g.place==='invest'?'invest':'cash', p=plan.parts.find(x=>x.id===g.id); let st,lack=0;
-    if(bud>0&&a>=bud) st='ready'; else if(m==null) st=g.date?'due':'nodate';
+    if(m==null&&g.date) st='due'; else if(bud>0&&a>=bud) st='ready'; else if(m==null) st='nodate';   // 日期已過一律是「已到期」（即使金額夠，也要提醒支付）
     else { lack=Math.max(0,bud-goalFV(a,p?p.sched:[],m,goalRatePct(cfg,depR,pl))); st=lack>bud*0.005?'short':'onTrack'; }
     out[g.id]={al:a,m,place:pl,st,lack:Math.round(lack)}; });
   return {info:out,plan};

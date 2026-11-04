@@ -232,54 +232,54 @@ const riskOf=d=>RISK[d.risk]||RISK.balanced;
 const growthItem=(d,c,R)=>{
   const tot=c.total||1, gp=c.growth/tot*100, dfp=c.def/tot*100, dp=c.dead/tot*100, us=c.invest>0?c.us/c.invest*100:0, [lo,hi]=R.grow;
   const conc=c.invest>0&&(us>80||us<20)?` 持股集中在單一市場（${Math.max(us,100-us).toFixed(0)}%）。`:'';
-  if(c.total<=0) return {t:'資產配置',s:'info',basis:'目前沒有資產資料',why:'有資產之後才能檢視成長型、防禦型與閒置資金的比例。',act:'先到「資產細節」新增銀行帳戶與持股。'};
+  if(c.total<=0) return {t:'資產配置',s:'info',sum:'先新增銀行帳戶與持股',basis:'目前沒有資產資料',why:'有資產之後才能檢視成長型、防禦型與閒置資金的比例。',act:'先到「資產細節」新增銀行帳戶與持股。'};
   const s=gp<lo?'info':gp>hi?'info':'good';
-  return {t:'資產配置',s,basis:`成長型 ${gp.toFixed(0)}%、防禦型 ${dfp.toFixed(0)}%、死水 ${dp.toFixed(0)}%；你的風險偏好是${R.l}，成長型參考區間 ${lo}–${hi}%。${conc}`,
+  return {t:'資產配置',s,sum:gp<lo?'成長型偏低，可用小額定期定額逐步調整':gp>hi?'成長型偏高，留意市場大跌時的波動':'成長型比例落在偏好區間',basis:`成長型 ${gp.toFixed(0)}%、防禦型 ${dfp.toFixed(0)}%、死水 ${dp.toFixed(0)}%；你的風險偏好是${R.l}，成長型參考區間 ${lo}–${hi}%。${conc}`,
     why:gp<lo?'成長型比例低於你選的偏好區間，長期資產成長可能較慢；但是否要調整，取決於年齡、投資年限與你能承受的波動。':gp>hi?'成長型比例高於你選的偏好區間，市場大跌時資產波動會比較大，也要留意是否過度集中。':'目前比例落在你選的偏好區間內。',
     act:gp<lo?'不用一次到位：可用小額定期定額逐步調整，或先確認緊急預備金已足夠；若你的實際風險承受度更高，請在上方更改風險偏好。':gp>hi?'檢視是否能承受單年 -30% 的波動；若不能，可把新增資金改投入防禦型資產，或到上方調整風險偏好。':'定期（例如每半年）檢視一次，偏離太多時用新增資金調整即可。'+(conc?' 也可考慮分散到其他市場。':'')};
 };
 function diagHome(d,c,f){
   const R=riskOf(d), out=[], tot=c.total||1, cfg=f.cfg;
   const dp=c.dead/tot*100;   // 1 閒置資金
-  out.push({t:'閒置資金（死水資產）',s:dp>R.dead?'warn':'good',basis:`死水資產 ${fmt(c.dead)}，佔總資產 ${dp.toFixed(0)}%（${R.l}參考上限 ${R.dead}%）`,
+  out.push({t:'閒置資金（死水資產）',s:dp>R.dead?'warn':'good',sum:c.dead<=0?'沒有閒置資金':dp>R.dead?(c.dead-(c.ef||0)>0?`約 ${fmt(c.dead-(c.ef||0))} 可轉高利活存或定存`:'死水資產偏多，先確認哪些是預備金'):'比例正常，定期比較各帳戶利率',basis:`死水資產 ${fmt(c.dead)}，佔總資產 ${dp.toFixed(0)}%（${R.l}參考上限 ${R.dead}%）`,
     why:`活存利率低於 ${DEAD_RATE}%，在通膨約 ${cfg.infl}% 的假設下，放著不動購買力會逐年縮水。`,
     act:c.dead<=0?'目前沒有需要處理的閒置資金。':dp>R.dead?`先確認哪些是緊急預備金或短期要用的錢，其餘約 ${fmt(Math.max(0,c.dead-(c.ef||0)))} 可轉到高利活存或定存。`:'維持現狀，定期比較各帳戶利率即可。'});
   const base=c.ef>0?c.ef:c.demand+c.hy, mo=f.ess>0?base/f.ess:null;   // 2 緊急預備金
-  if(mo==null) out.push({t:'緊急預備金',s:'info',basis:'尚未設定每月必要開銷',why:'沒有必要開銷就無法換算預備金可以支撐幾個月。',act:'到「資產細節」的月現金分配，在「必要開銷」填入子項目。'});
-  else out.push({t:'緊急預備金',s:mo<R.efM?'warn':'good',basis:`${c.ef>0?'已標記的緊急預備金':'活存（尚未標記緊急預備金）'} ${fmt(base)} ÷ 每月必要開銷 ${fmt(f.ess)} = ${mo.toFixed(1)} 個月（${R.l}參考下限 ${R.efM} 個月）`,
+  if(mo==null) out.push({t:'緊急預備金',s:'info',sum:'先到現金分配填必要開銷',basis:'尚未設定每月必要開銷',why:'沒有必要開銷就無法換算預備金可以支撐幾個月。',act:'到「資產細節」的現金分配，在「必要開銷」填入子項目。'});
+  else out.push({t:'緊急預備金',s:mo<R.efM?'warn':'good',sum:mo<R.efM?`約 ${mo.toFixed(1)} 個月，再補 ${fmt(R.efM*f.ess-base)}`:mo>R.efM*2?`約 ${mo.toFixed(1)} 個月，多出 ${fmt(base-R.efM*f.ess)} 可評估投資`:`約 ${mo.toFixed(1)} 個月，足夠`,basis:`${c.ef>0?'已標記的緊急預備金':'活存（尚未標記緊急預備金）'} ${fmt(base)} ÷ 每月必要開銷 ${fmt(f.ess)} = ${mo.toFixed(1)} 個月（${R.l}參考下限 ${R.efM} 個月）`,
     why:'收入中斷或臨時支出時，預備金能避免被迫賣出投資；收入越不穩定，通常需要越多個月。',
     act:mo<R.efM?`再補約 ${fmt(R.efM*f.ess-base)}，放在可隨時提領的帳戶，並在銀行帳戶展開後勾選「緊急預備金」。`:mo>R.efM*2?`已超過參考下限兩倍，多出的約 ${fmt(base-R.efM*f.ess)} 可評估用於投資或其他目標（FIRE 設定可選擇排除預備金）。`:'維持目前水準；收入或家庭狀況改變時重新評估。'});
   const ym=todayISO().slice(0,7), cur=d.tx.filter(t=>t.date.slice(0,7)===ym);   // 3 儲蓄率
   const inc=sumBy(cur.filter(t=>t.type==='income'),t=>t.amt), exp=sumBy(cur.filter(t=>t.type==='expense'),t=>t.amt), sal=d.salary||0, incB=sal>0?sal+sumBy(cur.filter(t=>t.type==='income'&&t.cat==='獎金'),t=>t.amt):inc, sr=incB>0&&exp>0?(incB-exp)/incB*100:null;   // 有固定分配就以它為收入基準，不必逐筆記收入
-  out.push(sr==null?{t:'本月儲蓄率',s:'info',basis:(d.salary||0)>0?'本月還沒有支出記帳':'尚未填入每月固定分配，也沒有收入記帳',why:'儲蓄率 =（收入 − 支出）÷ 收入；收入以「固定分配」為準，不需要逐筆記收入。',act:(d.salary||0)>0?'到「每月記帳」記錄本月支出。':'到「資產細節」的現金分配填入固定分配。'}
-    :{t:'本月儲蓄率',s:sr<0?'warn':'good',basis:`收入 ${fmt(incB)}${sal>0?'（固定分配＋本月獎金）':''}、支出 ${fmt(exp)}，儲蓄率 ${sr.toFixed(0)}%`,
-      why:sr<0?'本月支出超過收入，需要動用存款。':'儲蓄率沒有放諸四海皆準的標準，取決於年齡、收入與目標；重點是和自己的 FIRE 目標及過去月份比較。',
+  out.push(sr==null?{t:'本月儲蓄率',s:'info',sum:(d.salary||0)>0?'先記錄本月支出':'先填每月固定分配',basis:(d.salary||0)>0?'本月還沒有支出記帳':'尚未填入每月固定分配，也沒有收入記帳',why:'儲蓄率 =（收入 − 支出）÷ 收入；收入以「固定分配」為準，不需要逐筆記收入。',act:(d.salary||0)>0?'到「每月記帳」記錄本月支出。':'到「資產細節」的現金分配填入固定分配。'}
+    :{t:'本月儲蓄率',s:sr<0?'warn':'good',sum:sr<0?'本月入不敷出，檢視大額支出':`儲蓄率 ${sr.toFixed(0)}%，月初數字偏樂觀`,basis:`收入 ${fmt(incB)}${sal>0?'（固定分配＋本月獎金）':''}、支出 ${fmt(exp)}，儲蓄率 ${sr.toFixed(0)}%`,
+      why:(sr<0?'本月支出超過收入，需要動用存款。':'儲蓄率沒有放諸四海皆準的標準，取決於年齡、收入與目標；重點是和自己的 FIRE 目標及過去月份比較。')+'本月支出只計到目前已記帳的部分，月初的數字會偏樂觀。',
       act:sr<0?'檢視本月最大的支出分類，先區分哪些是一次性、哪些可以調整。':'到 FIRE 模擬器調整「每月投入」，看提高儲蓄對達成時間的影響。'});
   out.push(growthItem(d,c,R));   // 4 資產配置
   const ar=f.assets, rng=SCEN.map(([k,l])=>`${l} ${fireWhen(f.sc[k].real,d).replace(/（.*）/,'')}`).join('、');   // 5 FIRE
-  if(f.target<=0) out.push({t:'FIRE 進度',s:'info',basis:'尚未設定必要開銷，無法計算 FIRE 目標',why:'FIRE 目標 = 年支出 ÷ 安全提領率。',act:'到「資產細節」填入必要開銷與選擇消費。'});
+  if(f.target<=0) out.push({t:'FIRE 進度',s:'info',sum:'先填必要開銷才能計算',basis:'尚未設定必要開銷，無法計算 FIRE 目標',why:'FIRE 目標 = 年支出 ÷ 安全提領率。',act:'到「資產細節」填入必要開銷與選擇消費。'});
   else { const extra=Math.max(1000,Math.round(f.monthly*0.1/1000)*1000), m2=f.monthsAt(f.real.target,extra), m0=f.real.months;
-    out.push({t:'FIRE 進度（Real）',s:m0===0?'good':m0==null?'warn':'info',basis:`計入資產 ${fmt(ar.total)}，目標 ${fmt(f.real.target)}（今日幣值），達成率 ${f.real.pct.toFixed(1)}%；三種情境預計達成年份：${rng}`,
+    out.push({t:'FIRE 進度（Real）',s:m0===0?'good':m0==null?'warn':'info',sum:m0===0?'已達到 FIRE 目標':m0==null?'100 年內無法達成，需提高投入':`達成率 ${f.real.pct.toFixed(0)}%，每月多投 ${fmt(extra)}，${m2!=null&&m0>m2?`可提早 ${fmtDur(m0-m2)}`:'幾乎沒差'}`,basis:`計入資產 ${fmt(ar.total)}，目標 ${fmt(f.real.target)}（今日幣值），達成率 ${f.real.pct.toFixed(1)}%；三種情境預計達成年份：${rng}`,
       why:`結果取決於報酬率、通膨 ${f.cfg.infl}%、成本與稅費等假設；情境差距越大，代表預測越不確定。`,
       act:m0===0?'已達到目標；可檢視提領計畫與稅費。':m0==null?'以目前投入 100 年內無法達成：提高每月投入、降低年支出，或重新檢視報酬假設。':`試算：每月多投入 ${fmt(extra)}，${m2!=null&&m0>m2?`約可提早 ${fmtDur(m0-m2)}`:'提早不到 1 個月'}。可到 FIRE 設定調整情境與納入資產。`}); }
   return out.slice(0,5);
 }
 function diagDetail(d,c,f){   // 每次畫面更新都依資產細節（現金分配、資產分類、帳戶、持股、獎金）重新產生，最多 5 點
   const R=riskOf(d), out=[], sal=d.salary||0, bal=sal-sumBy(d.allocation,catTotal), inv=catOf(d,'投資理財')+catOf(d,'未來基金');
-  if(sal<=0) out.push({t:'現金流配置',s:'info',basis:'尚未填入每月固定支配',why:'有固定支配金額，才能檢視每月的錢分配到哪裡。',act:'到「現金分配」填入固定支配。'});
-  else out.push({t:'現金流配置',s:bal<0?'warn':'good',basis:`固定支配 ${fmt(sal)}，已分配 ${fmt(sal-bal)}，${bal<0?`超出 ${fmt(-bal)}`:`剩餘 ${fmt(bal)}`}；投資理財＋未來基金 ${fmt(inv)}（佔 ${(inv/sal*100).toFixed(0)}%）`,
+  if(sal<=0) out.push({t:'現金流配置',s:'info',sum:'先填每月固定分配',basis:'尚未填入每月固定分配',why:'有固定分配金額，才能檢視每月的錢分配到哪裡。',act:'到「現金分配」填入固定分配。'});
+  else out.push({t:'現金流配置',s:bal<0?'warn':'good',sum:bal<0?`超出 ${fmt(-bal)}，調降選擇消費`:bal>0?`剩 ${fmt(bal)} 尚未指定用途`:'分配完整',basis:`固定分配 ${fmt(sal)}，已分配 ${fmt(sal-bal)}，${bal<0?`超出 ${fmt(-bal)}`:`剩餘 ${fmt(bal)}`}；投資理財＋未來基金 ${fmt(inv)}（佔 ${(inv/sal*100).toFixed(0)}%）`,
     why:bal<0?'分配超過可支配金額，實際會用到存款或信用額度。':'沒有分配的餘額最容易不知不覺花掉；投資比例沒有通用標準，取決於你的目標與年限。',
-    act:bal<0?'調降「選擇消費」或其他子項目，直到分配不超過固定支配。':bal>0?`把剩餘 ${fmt(bal)} 指定用途（自動轉帳到投資理財／未來基金，或補預備金）；想知道投多少合適，可在 FIRE 模擬器試算。`:'分配完整；定期檢視是否符合目標。'});
+    act:bal<0?'調降「選擇消費」或其他子項目，直到分配不超過固定分配。':bal>0?`把剩餘 ${fmt(bal)} 指定用途（自動轉帳到投資理財／未來基金，或補預備金）；想知道投多少合適，可在 FIRE 模擬器試算。`:'分配完整；定期檢視是否符合目標。'});
   out.push(growthItem(d,c,R));
   const rate=a=>Math.max(...AT.map(([k])=>(a.m&&a.m[k]&&a.m[k].rate)||0));
   const best=[...d.accounts].sort((x,y)=>rate(y)-rate(x))[0];
   const cand=[...d.accounts].map(a=>({a,v:(a.m&&a.m.demand&&a.m.demand.rate<DEAD_RATE&&!a.m.demand.ef)?a.demand:0})).sort((x,y)=>y.v-x.v)[0];
   const keep=Math.max(0,f.ess*R.efM-c.ef), mv=cand?Math.max(0,cand.v-keep):0;
-  if(cand&&best&&mv>0&&rate(best)>0) out.push({t:'帳戶優化',s:'info',basis:`${cand.a.name} 活存 ${fmt(cand.v)}（利率低於 ${DEAD_RATE}%）；利率最高的是 ${best.name}（${rate(best)}%）`,why:`活存幾乎沒有利息；先保留預備金所需（依${R.l}約 ${R.efM} 個月），多的才適合搬去較高利率的帳戶。`,act:`保留 ${fmt(keep)}，其餘 ${fmt(mv)} 轉到 ${best.name}，每年約多 ${fmt(mv*rate(best)/100)} 利息（請先確認該帳戶的額度與提領限制）。`});
-  else out.push({t:'帳戶優化',s:'info',basis:c.ef<=0?'尚未標記緊急預備金':'活存配置沒有明顯可搬移的閒置資金',why:c.ef<=0?'標記後才能分辨哪些錢必須留在隨時可用的帳戶。':'各帳戶利率若未填寫，就無法比較哪個最划算。',act:c.ef<=0?'在銀行帳戶展開後勾選「緊急預備金」。':'到各帳戶補上利率，就能比較差異。'});
+  if(cand&&best&&mv>0&&rate(best)>0) out.push({t:'帳戶優化',s:'info',sum:`轉 ${fmt(mv)} 到 ${best.name}，年多約 ${fmt(mv*rate(best)/100)}`,basis:`${cand.a.name} 活存 ${fmt(cand.v)}（利率低於 ${DEAD_RATE}%）；利率最高的是 ${best.name}（${rate(best)}%）`,why:`活存幾乎沒有利息；先保留預備金所需（依${R.l}約 ${R.efM} 個月），多的才適合搬去較高利率的帳戶。`,act:`保留 ${fmt(keep)}，其餘 ${fmt(mv)} 轉到 ${best.name}，每年約多 ${fmt(mv*rate(best)/100)} 利息（請先確認該帳戶的額度與提領限制）。`});
+  else out.push({t:'帳戶優化',s:'info',sum:c.ef<=0?'先標記緊急預備金':'補上各帳戶利率才能比較',basis:c.ef<=0?'尚未標記緊急預備金':'活存配置沒有明顯可搬移的閒置資金',why:c.ef<=0?'標記後才能分辨哪些錢必須留在隨時可用的帳戶。':'各帳戶利率若未填寫，就無法比較哪個最划算。',act:c.ef<=0?'在銀行帳戶展開後勾選「緊急預備金」。':'到各帳戶補上利率，就能比較差異。'});
   const soon=[], now=Date.now();
   d.accounts.forEach(a=>AT.forEach(([k,l])=>{const e=a.m&&a.m[k]&&a.m[k].exp; if(e&&a[k]>0){const dd=(new Date(e.replace(/-/g,'/'))-now)/86400000; if(dd<=90&&dd>=-7) soon.push(`${a.name}${l}（${fmtDate(e)}）`);}}));
-  if(soon.length) out.push({t:'存款即將到期',s:'warn',basis:`${soon.join('、')} 在 90 天內到期`,why:'到期後多半自動轉成活存或以牌告利率續存，利率可能下降。',act:'現在就比較各銀行的續存利率，決定續存、轉存或提領。'});
+  if(soon.length) out.push({t:'存款即將到期',s:'warn',sum:'90 天內到期，先比較續存利率',basis:`${soon.join('、')} 在 90 天內到期`,why:'到期後多半自動轉成活存或以牌告利率續存，利率可能下降。',act:'現在就比較各銀行的續存利率，決定續存、轉存或提領。'});
   { const cfgG=f.cfg, depR=depRateAll(d,c,cfgG), gi=goalInfo(d,cfgG,depR).info, act=(d.goals||[]).filter(g=>!g.done), msgs=[]; let lack=false;   // 未來目標：到期、放置方式、預估是否足夠、出金帳戶
     const pay=(d.accounts||[]).find(a=>a.id===d.fundPayAcct);
     act.forEach(g=>{ const i=gi[g.id]; if(!i) return; const m=i.m;
@@ -293,11 +293,11 @@ function diagDetail(d,c,f){   // 每次畫面更新都依資產細節（現金�
     if(near>0){ if(pay&&near>pay.demand){ lack=true; msgs.push(`12 個月內到期的現金目標共 ${fmt(near)}，超過出金帳戶「${pay.name}」活存餘額 ${fmt(pay.demand)}`); } }
     const und=act.filter(g=>goalMonths(g)==null&&!g.date).length;
     if(und>0) msgs.push(`${und} 個目標未填使用時間，資金暫時不計入 FIRE`);
-    if(msgs.length) out.push({t:'未來目標',s:lack?'warn':'info',basis:msgs.slice(0,3).join('；')+(msgs.length>3?`…等 ${msgs.length} 項`:''),why:'有預計使用時間的目標會參與 FIRE 試算：未來基金依優先級與日期分配，到期前資金複利成長、到期時扣除預算；放置方式與時間不搭，會提高缺口或錯失成長。',act:'到「資產細節」指定未來基金出金帳戶；到「未來目標」填預計使用時間、選現金或投資；缺口大的調高每月分配或延後時間；到期後左滑按「支付」。'}); }
+    if(msgs.length) out.push({t:'未來目標',s:lack?'warn':'info',sum:lack?`${msgs.length} 項需處理（缺口或已到期）`:`${msgs.length} 項待確認（日期、放置方式、出金帳戶）`,basis:msgs.slice(0,3).join('；')+(msgs.length>3?`…等 ${msgs.length} 項`:''),why:'有預計使用時間的目標會參與 FIRE 試算：未來基金依優先級與日期分配，到期前資金複利成長、到期時扣除預算；放置方式與時間不搭，會提高缺口或錯失成長。',act:'到「資產細節」指定未來基金出金帳戶；到「未來目標」填預計使用時間、選現金或投資；缺口大的調高每月分配或延後時間；到期後左滑按「支付」。'}); }
   const bs=d.bonuses||[], nm=new Date().getMonth()+1;
   if(bs.length){ const b=[...bs].sort((x,y)=>((x.month-nm+12)%12)-((y.month-nm+12)%12))[0],nj=b.inj||[];
-    out.push({t:'不定期獎金',s:'info',basis:`預期下一筆${b.name?`「${b.name}」`:''} ${b.month} 月 ${fmt(b.amt)}（實際金額每年不同）`,why:nj.length?'你已設定獎金的注入比例，會自動計入 FIRE 與未來基金的試算。':'尚未設定注入比例，獎金不會計入試算。',act:nj.length?`依設定注入 ${nj.map(i=>`${i.cat||'未選分類'} ${i.ratio||0}%`).join('、')}，其餘留作預備金或獎勵自己。`:'在獎金「編輯」設定要注入哪些分類與比例；也可先補足緊急預備金，再決定投入比例。'}); }
-  else out.push({t:'不定期獎金',s:'info',basis:'尚未設定',why:'獎金是加速達成目標的重要來源，但需要先決定用途。',act:'在現金分配的「不定期獎金」按編輯新增。'});
+    out.push({t:'不定期獎金',s:'info',sum:nj.length?'已設定注入比例':'尚未設定注入比例，不計入試算',basis:`預期下一筆${b.name?`「${b.name}」`:''} ${b.month} 月 ${fmt(b.amt)}（實際金額每年不同）`,why:nj.length?'你已設定獎金的注入比例，會自動計入 FIRE 與未來基金的試算。':'尚未設定注入比例，獎金不會計入試算。',act:nj.length?`依設定注入 ${nj.map(i=>`${i.cat||'未選分類'} ${i.ratio||0}%`).join('、')}，其餘留作預備金或獎勵自己。`:'在獎金「編輯」設定要注入哪些分類與比例；也可先補足緊急預備金，再決定投入比例。'}); }
+  else out.push({t:'不定期獎金',s:'info',sum:'尚未設定獎金（沒有也可以略過）',basis:'尚未設定',why:'獎金是加速達成目標的重要來源，但需要先決定用途。',act:'在現金分配的「不定期獎金」按編輯新增。'});
   return out.slice(0,6);
 }
 const r2=x=>Math.round(x*100)/100;
@@ -520,8 +520,8 @@ function planRemote(ctx,raw,cur,busy){   // 收到雲端快照：忽略（已知
 
 /* ============ 共用元件 ============ */
 /* Lucide 線條圖示（內嵌 SVG，離線可用；來源 lucide-icons/lucide，ISC 授權）：顏色沿用文字色，不加底框 */
-const LUCIDE={"wallet": "<path d=\"M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1\"/> <path d=\"M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4\"/>", "chart-no-axes-combined": "<path d=\"M12 16v5\"/> <path d=\"M16 14.639V21\"/> <path d=\"M20 10.656V21\"/> <path d=\"m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15\"/> <path d=\"M4 18.463V21\"/> <path d=\"M8 14.656V21\"/>", "target": "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <circle cx=\"12\" cy=\"12\" r=\"6\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/>", "notebook-pen": "<path d=\"M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4\"/> <path d=\"M2 6h4\"/> <path d=\"M2 10h4\"/> <path d=\"M2 14h4\"/> <path d=\"M2 18h4\"/> <path d=\"M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z\"/>", "banknote": "<rect width=\"20\" height=\"12\" x=\"2\" y=\"6\" rx=\"2\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/> <path d=\"M6 12h.01M18 12h.01\"/>", "landmark": "<path d=\"M10 18v-7\"/> <path d=\"M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z\"/> <path d=\"M14 18v-7\"/> <path d=\"M18 18v-7\"/> <path d=\"M3 22h18\"/> <path d=\"M6 18v-7\"/>", "trending-up": "<path d=\"M16 7h6v6\"/> <path d=\"m22 7-8.5 8.5-5-5L2 17\"/>", "chart-pie": "<path d=\"M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z\"/> <path d=\"M21.21 15.89A10 10 0 1 1 8 2.83\"/>", "piggy-bank": "<path d=\"M11 17h3v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a3.16 3.16 0 0 0 2-2h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-1a5 5 0 0 0-2-4V3a4 4 0 0 0-3.2 1.6l-.3.4H11a6 6 0 0 0-6 6v1a5 5 0 0 0 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z\"/> <path d=\"M16 10h.01\"/> <path d=\"M2 8v1a2 2 0 0 0 2 2h1\"/>", "calendar-sync": "<path d=\"M11 10v4h4\"/> <path d=\"m11 14 1.535-1.605a5 5 0 018 1.5\"/> <path d=\"M16 2v3\"/> <path d=\"m21 18-1.535 1.605a5 5 0 01-8-1.5\"/> <path d=\"M21 22v-4h-4\"/> <path d=\"M21 8.517V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h3.517\"/> <path d=\"M3 9h4\"/> <path d=\"M8 2v3\"/>", "flame": "<path d=\"M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4\"/>", "camera": "<path d=\"M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z\"/> <circle cx=\"12\" cy=\"13\" r=\"3\"/>"};
-const Ic=({n,s=16,w=1.8})=><svg aria-hidden="true" width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" className="shrink-0" dangerouslySetInnerHTML={{__html:LUCIDE[n]}}/>;
+const LUCIDE={"wallet": "<path d=\"M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1\"/> <path d=\"M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4\"/>", "chart-no-axes-combined": "<path d=\"M12 16v5\"/> <path d=\"M16 14.639V21\"/> <path d=\"M20 10.656V21\"/> <path d=\"m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15\"/> <path d=\"M4 18.463V21\"/> <path d=\"M8 14.656V21\"/>", "target": "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <circle cx=\"12\" cy=\"12\" r=\"6\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/>", "notebook-pen": "<path d=\"M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4\"/> <path d=\"M2 6h4\"/> <path d=\"M2 10h4\"/> <path d=\"M2 14h4\"/> <path d=\"M2 18h4\"/> <path d=\"M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z\"/>", "banknote": "<rect width=\"20\" height=\"12\" x=\"2\" y=\"6\" rx=\"2\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/> <path d=\"M6 12h.01M18 12h.01\"/>", "landmark": "<path d=\"M10 18v-7\"/> <path d=\"M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z\"/> <path d=\"M14 18v-7\"/> <path d=\"M18 18v-7\"/> <path d=\"M3 22h18\"/> <path d=\"M6 18v-7\"/>", "trending-up": "<path d=\"M16 7h6v6\"/> <path d=\"m22 7-8.5 8.5-5-5L2 17\"/>", "chart-pie": "<path d=\"M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z\"/> <path d=\"M21.21 15.89A10 10 0 1 1 8 2.83\"/>", "piggy-bank": "<path d=\"M11 17h3v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a3.16 3.16 0 0 0 2-2h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-1a5 5 0 0 0-2-4V3a4 4 0 0 0-3.2 1.6l-.3.4H11a6 6 0 0 0-6 6v1a5 5 0 0 0 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z\"/> <path d=\"M16 10h.01\"/> <path d=\"M2 8v1a2 2 0 0 0 2 2h1\"/>", "calendar-sync": "<path d=\"M11 10v4h4\"/> <path d=\"m11 14 1.535-1.605a5 5 0 018 1.5\"/> <path d=\"M16 2v3\"/> <path d=\"m21 18-1.535 1.605a5 5 0 01-8-1.5\"/> <path d=\"M21 22v-4h-4\"/> <path d=\"M21 8.517V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h3.517\"/> <path d=\"M3 9h4\"/> <path d=\"M8 2v3\"/>", "flame": "<path d=\"M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4\"/>", "camera": "<path d=\"M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z\"/> <circle cx=\"12\" cy=\"13\" r=\"3\"/>", "sliders-horizontal": "<path d=\"M10 5H3\"/> <path d=\"M12 19H3\"/> <path d=\"M14 3v4\"/> <path d=\"M16 17v4\"/> <path d=\"M21 12h-9\"/> <path d=\"M21 19h-5\"/> <path d=\"M21 5h-7\"/> <path d=\"M8 10v4\"/> <path d=\"M8 12H3\"/>", "chart-candlestick": "<path d=\"M9 5v4\"/> <rect width=\"4\" height=\"6\" x=\"7\" y=\"9\" rx=\"1\"/> <path d=\"M9 15v2\"/> <path d=\"M17 3v2\"/> <rect width=\"4\" height=\"8\" x=\"15\" y=\"5\" rx=\"1\"/> <path d=\"M17 13v3\"/> <path d=\"M3 3v16a2 2 0 0 0 2 2h16\"/>", "heart-pulse": "<path d=\"M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5\"/> <path d=\"M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27\"/>", "gift": "<path d=\"M12 7v14\"/> <path d=\"M20 11v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8\"/> <path d=\"M7.5 7a1 1 0 0 1 0-5A4.8 8 0 0 1 12 7a4.8 8 0 0 1 4.5-5 1 1 0 0 1 0 5\"/> <rect x=\"3\" y=\"7\" width=\"18\" height=\"4\" rx=\"1\"/>", "calendar-clock": "<path d=\"M16 14v2.2l1.6 1\"/> <path d=\"M16 2v3\"/> <path d=\"M21 7.338V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h2.338\"/> <path d=\"M3 9h5.859\"/> <path d=\"M8 2v3\"/> <circle cx=\"16\" cy=\"16\" r=\"6\"/>", "list-tree": "<path d=\"M8 5h13\"/> <path d=\"M13 12h8\"/> <path d=\"M13 19h8\"/> <path d=\"M3 10a2 2 0 0 0 2 2h3\"/> <path d=\"M3 5v12a2 2 0 0 0 2 2h3\"/>"};
+const Ic=({n,s=16,w=1.8})=><svg aria-hidden="true" width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 block" dangerouslySetInnerHTML={{__html:LUCIDE[n]}}/>;
 const TT=({n,s=16,children})=><span className="inline-flex items-center gap-2"><Ic n={n} s={s}/>{children}</span>;   // 圖示＋標題文字（間距 8px、垂直置中）
 const TAB_ICONS=['wallet','chart-no-axes-combined','target','notebook-pen'];
 // 單行顯示；放不下時自動縮小字體（不換行）
@@ -609,8 +609,8 @@ function AiCard({title,items,risk,onRisk}) {
   const nW=items.filter(x=>x.s==='warn').length, nI=items.filter(x=>x.s==='info').length;
   const row=it=>{ const o=!!ex[it.t]; return (<div key={it.t} className="py-2.5 border-t-[0.5px] border-neutral-200">
     <div className="flex items-center gap-1.5 text-sm font-semibold cursor-pointer" onClick={()=>setEx(p=>({...p,[it.t]:!p[it.t]}))}><i className="w-2 h-2 rounded-full shrink-0" style={{background:dot[it.s]}}/><span className="flex-1 min-w-0 truncate">{it.t}</span><span className="text-[10px] font-normal text-zinc-400">{lab[it.s]}</span><Chev open={o}/></div>
-    {o?<><L k="判斷依據" v={it.basis}/><L k="建議原因" v={it.why}/><L k="可執行" v={it.act}/></>:<div className="text-[11px] text-zinc-500 leading-4 mt-0.5 pl-3.5 truncate">{it.basis}</div>}</div>); };
-  return (<Card className="p-4"><div className="text-sm font-semibold">{title}</div>
+    {o?<><L k="判斷依據" v={it.basis}/><L k="建議原因" v={it.why}/><L k="可執行" v={it.act}/></>:<div className="text-[11px] text-zinc-500 leading-4 mt-0.5 pl-3.5 truncate">{it.sum||it.basis}</div>}</div>); };
+  return (<Card className="p-4"><div className="text-sm font-semibold"><TT n="heart-pulse">{title}</TT></div>
     <div className="text-[10px] text-zinc-400 mb-2">依你的資產、記帳資料與風險偏好，以規則自動分析</div>
     {onRisk&&<div className="flex items-center gap-2 mb-2"><span className="text-xs text-zinc-500 shrink-0">風險偏好</span>{Object.entries(RISK).map(([k,v])=><Btn key={k} gray={risk===k} onClick={()=>onRisk(k)}>{v.l}</Btn>)}</div>}
     <div className="text-xs text-zinc-600 mb-1">{attn.length?`${nW?`${nW} 項需注意`:''}${nW&&nI?'、':''}${nI?`${nI} 項留意`:''}${good.length?`，${good.length} 項良好`:''}`:'目前沒有需要處理的項目'}</div>
@@ -737,11 +737,11 @@ function PageMy({d,setD,fund,c,mom}) {
       <div className="text-xs text-zinc-500 mb-2">現金 = 活存（年利率 ≥ 1% 為高利活存）　合計 {fmt(c.cash)}</div>
       {d.accounts.map(x=>(<div key={x.id} className="mt-3"><div className="text-sm font-semibold">{x.name}</div><Row l={((x.m&&x.m.demand&&x.m.demand.rate)||0)>=DEAD_RATE?'活存（高利活存）':'活存'} v={x.demand}/></div>))}
     </Sheet>}
-    {sheet==='fixed'&&<Sheet title="定存明細" icon="landmark" onClose={()=>setSheet(null)}>
+    {sheet==='fixed'&&<Sheet title="定存明細" icon="calendar-clock" onClose={()=>setSheet(null)}>
       <div className="text-xs text-zinc-500 mb-2">定存合計 {fmt(c.fixed)}</div>
       {d.accounts.map(x=><Row key={x.id} l={x.name+'　定存'} v={x.fixed}/>)}
     </Sheet>}
-    {sheet==='invest'&&<Sheet title="投資明細" icon="chart-no-axes-combined" onClose={()=>setSheet(null)}>
+    {sheet==='invest'&&<Sheet title="投資明細" icon="list-tree" onClose={()=>setSheet(null)}>
       <div className="text-xs text-zinc-500 mb-2">投資 = 美股 + 台股（來自資產細節的股票持股）　合計 {fmt(c.invest)}</div>
       {[['美股','USD',c.us],['台股','TWD',c.tw]].map(([t,cur,sum])=>{const hs2=d.holdings.filter(h=>h.cur===cur);return (<div key={t} className="mt-3">
         <div className="flex justify-between text-sm font-semibold"><span>{t}</span><span>{fmt(sum)}</span></div>
@@ -790,8 +790,8 @@ function PageMy({d,setD,fund,c,mom}) {
       <div className="border-t-[0.5px] border-neutral-300 my-3"/>
       <div className="text-sm font-semibold">排除項目</div>{!depOn&&<div className="text-[11px] text-zinc-400 leading-4">需先勾選「活存」或「定存」才能使用</div>}
       <Ex on={cf.exEF} onChange={v=>setF({exEF:v})} label="排除緊急預備金" right={<span className="text-zinc-600">{fmt(c.ef||0)}</span>}/>
-      {fundSaved>0&&<div className="flex items-center justify-between gap-2 py-1.5 text-sm"><span className="text-zinc-500 min-w-0">未來基金中暫不參與試算（無日期／已到期／超出預算）</span><span className="text-zinc-600 shrink-0">{fmt(((f.gp||{}).exSaved)||0)}</span></div>}
       <Ex on={useShort} onChange={v=>setF({exShort:v})} label="排除短期用途資金" right={<NumBox value={cf.shortAmt||0} onChange={v=>setF({shortAmt:v})} className="w-32 h-9 px-3 text-sm"/>}/>
+      {fundSaved>0&&<div className="flex items-start justify-between gap-3 py-1.5 text-[11px] leading-4 text-zinc-500"><span className="min-w-0 whitespace-normal">未來基金中暫不參與試算（無日期／已到期／超出預算）</span><span className="shrink-0 text-zinc-600">{fmt(((f.gp||{}).exSaved)||0)}</span></div>}
       <div className="flex justify-between text-sm font-semibold pt-2 border-t-[0.5px] border-neutral-200 mt-2"><span>計入 FIRE 的資產</span><span>{fmt(A.total)}</span></div>
       <div className="text-[11px] text-zinc-400 whitespace-normal leading-4 mt-1">原選取 {fmt(A.gross)}{A.exEF>0?`，扣除緊急預備金 ${fmt(A.exEF)}`:''}{A.exFund>0?`，未來基金 ${fmt(A.exFund)} 改由「未來目標」依到期日另計`:''}{A.short>0?`，扣除短期用途資金 ${fmt(A.short)}`:''}。</div>
     </Sheet>; })()}
@@ -1008,7 +1008,7 @@ function PageDetail({d,setD,c}) {
         </div>);})}
     </Acc>
 
-    <Acc title="股票持股" sub={`${d.holdings.length} 檔 · 總市值 ${fmt(mvAll)}`} open={sec.stock} onToggle={()=>tsec('stock')} right={<Btn onClick={e=>{e.stopPropagation();setStForm({kind:'new'});}}>＋ 新增</Btn>}>
+    <Acc title={<TT n="chart-candlestick">股票持股</TT>} sub={`${d.holdings.length} 檔 · 總市值 ${fmt(mvAll)}`} open={sec.stock} onToggle={()=>tsec('stock')} right={<Btn onClick={e=>{e.stopPropagation();setStForm({kind:'new'});}}>＋ 新增</Btn>}>
       <Num label="美元匯率（USD→TWD）" value={d.fx||32} onChange={v=>setD(p=>({...p,fx:v}))}/>
       {!d.holdings.length&&<div className="text-xs text-zinc-400 py-3 whitespace-normal">尚無持股。按「新增持股」，或在每月記帳選「投資」類別買股，會自動建立。現價為手動輸入（無即時報價）。</div>}
       {hsorted.map((h,i)=>{const v=holdVals(h);return (
@@ -1044,11 +1044,11 @@ function PageDetail({d,setD,c}) {
     </Acc>
 
     <Card className={`mx-4 mt-6 ${sec.alloc?'pb-4':''}`}>
-      <div className="px-4 h-14 flex items-center gap-2 cursor-pointer" onClick={()=>tsec('alloc')}><div className="flex-1 min-w-0"><div className="text-sm font-semibold leading-5">現金分配</div>{!sec.alloc&&<div className="text-[11px] text-zinc-500 leading-4 truncate">開銷 {fmt(catSum(['必要開銷','選擇消費']))}・理財 {fmt(catSum(['投資理財','未來基金']))}</div>}</div><Btn onClick={e=>{e.stopPropagation();addCat();setSec(o=>({...o,alloc:true}));}}>＋ 新增</Btn><Chev open={sec.alloc}/></div>
+      <div className="px-4 h-14 flex items-center gap-2 cursor-pointer" onClick={()=>tsec('alloc')}><div className="flex-1 min-w-0"><div className="text-sm font-semibold leading-5"><TT n="sliders-horizontal">現金分配</TT></div>{!sec.alloc&&<div className="text-[11px] text-zinc-500 leading-4 truncate">開銷 {fmt(catSum(['必要開銷','選擇消費']))}・理財 {fmt(catSum(['投資理財','未來基金']))}</div>}</div><Btn onClick={e=>{e.stopPropagation();addCat();setSec(o=>({...o,alloc:true}));}}>＋ 新增</Btn><Chev open={sec.alloc}/></div>
       {sec.alloc&&<>
       <div className="px-4">
         <div className="min-h-12 flex items-center gap-1 text-xs">
-          <div className="flex-1 min-w-0 text-center"><div className="text-[10px] text-zinc-400">固定分配</div><div className="flex items-center justify-center gap-1">{salEdit?<NumBox autoFocus value={salary} onChange={v=>setD(p=>({...p,salary:v}))} className="w-20 h-8 px-1 text-xs"/>:<Fit className="text-sm font-semibold">{fmt(salary)}</Fit>}<button onClick={()=>setSalEdit(e=>!e)} aria-label="編輯固定支配" className="shrink-0 text-zinc-400">{salEdit?'✓':'✎'}</button></div></div>
+          <div className="flex-1 min-w-0 text-center"><div className="text-[10px] text-zinc-400">固定分配</div><div className="flex items-center justify-center gap-1">{salEdit?<NumBox autoFocus value={salary} onChange={v=>setD(p=>({...p,salary:v}))} className="w-20 h-8 px-1 text-xs"/>:<Fit className="text-sm font-semibold">{fmt(salary)}</Fit>}<button onClick={()=>setSalEdit(e=>!e)} aria-label="編輯固定分配" className="shrink-0 text-zinc-400">{salEdit?'✓':'✎'}</button></div></div>
           <span className="shrink-0 text-zinc-400">−</span>
           <div className="flex-1 min-w-0 text-center"><div className="text-[10px] text-zinc-400">已分配</div><Fit className="text-sm font-semibold">{fmt(allocated)}</Fit></div>
           <span className="shrink-0 text-zinc-400">=</span>
@@ -1204,7 +1204,7 @@ function PageGoals({d,setD,fund}) {
           </div>
         </SwipeLeft>); })}
     </div>
-    <div className="mt-6 flex items-center justify-between"><div className="text-sm font-semibold">願望清單</div><Btn onClick={()=>openForm('wish')}>＋ 新增項目</Btn></div>
+    <div className="mt-6 flex items-center justify-between"><div className="text-sm font-semibold"><TT n="gift">願望清單</TT></div><Btn onClick={()=>openForm('wish')}>＋ 新增項目</Btn></div>
     <div className="mt-1">
       <div className={`${WR} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span>願望</span><span>預算</span><span className="text-center">達成</span></div>
       {wishes.map(w=>(
@@ -1563,7 +1563,7 @@ function App() {
         {CONFIGURED?<button onClick={()=>{setMenu(false);auth.signOut();}} className="px-3 py-2 w-full text-left font-medium">登出</button>:<div className="px-3 py-2 text-zinc-500">尚未設定 Firebase</div>}
       </div></div>}
     <nav className="flex gap-3 px-4 mt-3 overflow-x-auto no-sb">
-      {TABS.map((t,i)=><button key={t} onClick={()=>setTab(i)} className={`px-3.5 py-1.5 rounded-[20px] text-sm font-medium leading-5 transition-colors ${tab===i?'bg-black text-white':'bg-neutral-100 text-black'}`}><TT n={TAB_ICONS[i]} s={20}>{t}</TT></button>)}
+      {TABS.map((t,i)=><button key={t} onClick={()=>setTab(i)} className={`px-3.5 py-1.5 rounded-[20px] text-sm font-medium leading-5 transition-colors inline-flex items-center justify-center ${tab===i?'bg-black text-white':'bg-neutral-100 text-black'}`} aria-label={t} aria-current={tab===i?'page':undefined}>{tab===i?<TT n={TAB_ICONS[i]} s={20}>{t}</TT>:<Ic n={TAB_ICONS[i]} s={20}/>}</button>)}
     </nav>
     {!ready&&<div className="py-24 text-center text-sm text-zinc-500">{sync.t.startsWith('初始化失敗')?<><div className="whitespace-normal px-8 leading-5">{sync.t.replace('・點此重試','')}<br/>尚未建立雲端資料，目前不開放編輯，也不會覆蓋任何資料。</div><div className="mt-3"><Btn onClick={retryNow}>重新嘗試</Btn></div></>:'載入中…'}</div>}
     <main key={tab} style={{animation:'fade .18s ease-out',display:ready?'block':'none'}}>

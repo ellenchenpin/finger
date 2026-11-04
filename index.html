@@ -283,7 +283,7 @@ function diagDetail(d,c,f){   // 每次畫面更新都依資產細節（現金�
   { const cfgG=f.cfg, depR=depRateAll(d,c,cfgG), gi=goalInfo(d,cfgG,depR).info, act=(d.goals||[]).filter(g=>!g.done), msgs=[]; let lack=false;   // 未來目標：到期、放置方式、預估是否足夠、出金帳戶
     const pay=(d.accounts||[]).find(a=>a.id===d.fundPayAcct);
     act.forEach(g=>{ const i=gi[g.id]; if(!i) return; const m=i.m;
-      if(i.st==='due'){ lack=true; msgs.unshift(`「${g.name}」已到期，請確認是否已支付（左滑按「支付」）`); }
+      if(i.st==='due'){ lack=true; msgs.unshift(`「${g.name}」已到期，請確認是否已支付（點該項目的狀態即可支付）`); }
       if(g.est&&m!=null&&m<=12) msgs.push(`「${g.name}」的日期是估計的（約 ${g.date.slice(0,7).replace('-','/')}），快到了，請確認實際使用時間`);
       if(i.st==='short'){ lack=true; msgs.push(`「${g.name}」依目前分配與保守估算，到期預估缺約 ${fmt(i.lack)}`); }
       if(m!=null&&i.place==='cash'&&m>=60) msgs.push(`「${g.name}」還有約 ${Math.floor(m/12)} 年才會用，卻放在現金，可考慮改投資`);
@@ -520,7 +520,7 @@ function planRemote(ctx,raw,cur,busy){   // 收到雲端快照：忽略（已知
 
 /* ============ 共用元件 ============ */
 /* Lucide 線條圖示（內嵌 SVG，離線可用；來源 lucide-icons/lucide，ISC 授權）：顏色沿用文字色，不加底框 */
-const LUCIDE={"wallet": "<path d=\"M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1\"/> <path d=\"M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4\"/>", "chart-no-axes-combined": "<path d=\"M12 16v5\"/> <path d=\"M16 14.639V21\"/> <path d=\"M20 10.656V21\"/> <path d=\"m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15\"/> <path d=\"M4 18.463V21\"/> <path d=\"M8 14.656V21\"/>", "target": "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <circle cx=\"12\" cy=\"12\" r=\"6\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/>", "notebook-pen": "<path d=\"M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4\"/> <path d=\"M2 6h4\"/> <path d=\"M2 10h4\"/> <path d=\"M2 14h4\"/> <path d=\"M2 18h4\"/> <path d=\"M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z\"/>", "banknote": "<rect width=\"20\" height=\"12\" x=\"2\" y=\"6\" rx=\"2\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/> <path d=\"M6 12h.01M18 12h.01\"/>", "landmark": "<path d=\"M10 18v-7\"/> <path d=\"M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z\"/> <path d=\"M14 18v-7\"/> <path d=\"M18 18v-7\"/> <path d=\"M3 22h18\"/> <path d=\"M6 18v-7\"/>", "trending-up": "<path d=\"M16 7h6v6\"/> <path d=\"m22 7-8.5 8.5-5-5L2 17\"/>", "chart-pie": "<path d=\"M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z\"/> <path d=\"M21.21 15.89A10 10 0 1 1 8 2.83\"/>", "piggy-bank": "<path d=\"M11 17h3v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a3.16 3.16 0 0 0 2-2h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-1a5 5 0 0 0-2-4V3a4 4 0 0 0-3.2 1.6l-.3.4H11a6 6 0 0 0-6 6v1a5 5 0 0 0 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z\"/> <path d=\"M16 10h.01\"/> <path d=\"M2 8v1a2 2 0 0 0 2 2h1\"/>", "calendar-sync": "<path d=\"M11 10v4h4\"/> <path d=\"m11 14 1.535-1.605a5 5 0 018 1.5\"/> <path d=\"M16 2v3\"/> <path d=\"m21 18-1.535 1.605a5 5 0 01-8-1.5\"/> <path d=\"M21 22v-4h-4\"/> <path d=\"M21 8.517V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h3.517\"/> <path d=\"M3 9h4\"/> <path d=\"M8 2v3\"/>", "flame": "<path d=\"M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4\"/>", "camera": "<path d=\"M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z\"/> <circle cx=\"12\" cy=\"13\" r=\"3\"/>", "sliders-horizontal": "<path d=\"M10 5H3\"/> <path d=\"M12 19H3\"/> <path d=\"M14 3v4\"/> <path d=\"M16 17v4\"/> <path d=\"M21 12h-9\"/> <path d=\"M21 19h-5\"/> <path d=\"M21 5h-7\"/> <path d=\"M8 10v4\"/> <path d=\"M8 12H3\"/>", "chart-candlestick": "<path d=\"M9 5v4\"/> <rect width=\"4\" height=\"6\" x=\"7\" y=\"9\" rx=\"1\"/> <path d=\"M9 15v2\"/> <path d=\"M17 3v2\"/> <rect width=\"4\" height=\"8\" x=\"15\" y=\"5\" rx=\"1\"/> <path d=\"M17 13v3\"/> <path d=\"M3 3v16a2 2 0 0 0 2 2h16\"/>", "heart-pulse": "<path d=\"M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5\"/> <path d=\"M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27\"/>", "gift": "<path d=\"M12 7v14\"/> <path d=\"M20 11v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8\"/> <path d=\"M7.5 7a1 1 0 0 1 0-5A4.8 8 0 0 1 12 7a4.8 8 0 0 1 4.5-5 1 1 0 0 1 0 5\"/> <rect x=\"3\" y=\"7\" width=\"18\" height=\"4\" rx=\"1\"/>", "calendar-clock": "<path d=\"M16 14v2.2l1.6 1\"/> <path d=\"M16 2v3\"/> <path d=\"M21 7.338V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h2.338\"/> <path d=\"M3 9h5.859\"/> <path d=\"M8 2v3\"/> <circle cx=\"16\" cy=\"16\" r=\"6\"/>", "list-tree": "<path d=\"M8 5h13\"/> <path d=\"M13 12h8\"/> <path d=\"M13 19h8\"/> <path d=\"M3 10a2 2 0 0 0 2 2h3\"/> <path d=\"M3 5v12a2 2 0 0 0 2 2h3\"/>"};
+const LUCIDE={"wallet": "<path d=\"M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1\"/> <path d=\"M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4\"/>", "chart-no-axes-combined": "<path d=\"M12 16v5\"/> <path d=\"M16 14.639V21\"/> <path d=\"M20 10.656V21\"/> <path d=\"m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15\"/> <path d=\"M4 18.463V21\"/> <path d=\"M8 14.656V21\"/>", "target": "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <circle cx=\"12\" cy=\"12\" r=\"6\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/>", "notebook-pen": "<path d=\"M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4\"/> <path d=\"M2 6h4\"/> <path d=\"M2 10h4\"/> <path d=\"M2 14h4\"/> <path d=\"M2 18h4\"/> <path d=\"M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z\"/>", "banknote": "<rect width=\"20\" height=\"12\" x=\"2\" y=\"6\" rx=\"2\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/> <path d=\"M6 12h.01M18 12h.01\"/>", "landmark": "<path d=\"M10 18v-7\"/> <path d=\"M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z\"/> <path d=\"M14 18v-7\"/> <path d=\"M18 18v-7\"/> <path d=\"M3 22h18\"/> <path d=\"M6 18v-7\"/>", "trending-up": "<path d=\"M16 7h6v6\"/> <path d=\"m22 7-8.5 8.5-5-5L2 17\"/>", "chart-pie": "<path d=\"M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z\"/> <path d=\"M21.21 15.89A10 10 0 1 1 8 2.83\"/>", "piggy-bank": "<path d=\"M11 17h3v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a3.16 3.16 0 0 0 2-2h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-1a5 5 0 0 0-2-4V3a4 4 0 0 0-3.2 1.6l-.3.4H11a6 6 0 0 0-6 6v1a5 5 0 0 0 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z\"/> <path d=\"M16 10h.01\"/> <path d=\"M2 8v1a2 2 0 0 0 2 2h1\"/>", "calendar-sync": "<path d=\"M11 10v4h4\"/> <path d=\"m11 14 1.535-1.605a5 5 0 018 1.5\"/> <path d=\"M16 2v3\"/> <path d=\"m21 18-1.535 1.605a5 5 0 01-8-1.5\"/> <path d=\"M21 22v-4h-4\"/> <path d=\"M21 8.517V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h3.517\"/> <path d=\"M3 9h4\"/> <path d=\"M8 2v3\"/>", "flame": "<path d=\"M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4\"/>", "camera": "<path d=\"M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z\"/> <circle cx=\"12\" cy=\"13\" r=\"3\"/>", "sliders-horizontal": "<path d=\"M10 5H3\"/> <path d=\"M12 19H3\"/> <path d=\"M14 3v4\"/> <path d=\"M16 17v4\"/> <path d=\"M21 12h-9\"/> <path d=\"M21 19h-5\"/> <path d=\"M21 5h-7\"/> <path d=\"M8 10v4\"/> <path d=\"M8 12H3\"/>", "chart-candlestick": "<path d=\"M9 5v4\"/> <rect width=\"4\" height=\"6\" x=\"7\" y=\"9\" rx=\"1\"/> <path d=\"M9 15v2\"/> <path d=\"M17 3v2\"/> <rect width=\"4\" height=\"8\" x=\"15\" y=\"5\" rx=\"1\"/> <path d=\"M17 13v3\"/> <path d=\"M3 3v16a2 2 0 0 0 2 2h16\"/>", "heart-pulse": "<path d=\"M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5\"/> <path d=\"M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27\"/>", "gift": "<path d=\"M12 7v14\"/> <path d=\"M20 11v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8\"/> <path d=\"M7.5 7a1 1 0 0 1 0-5A4.8 8 0 0 1 12 7a4.8 8 0 0 1 4.5-5 1 1 0 0 1 0 5\"/> <rect x=\"3\" y=\"7\" width=\"18\" height=\"4\" rx=\"1\"/>", "calendar-clock": "<path d=\"M16 14v2.2l1.6 1\"/> <path d=\"M16 2v3\"/> <path d=\"M21 7.338V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h2.338\"/> <path d=\"M3 9h5.859\"/> <path d=\"M8 2v3\"/> <circle cx=\"16\" cy=\"16\" r=\"6\"/>", "list-tree": "<path d=\"M8 5h13\"/> <path d=\"M13 12h8\"/> <path d=\"M13 19h8\"/> <path d=\"M3 10a2 2 0 0 0 2 2h3\"/> <path d=\"M3 5v12a2 2 0 0 0 2 2h3\"/>", "circle-check": "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <path d=\"m16 9-5.5 5.5L8 12\"/>", "pen-line": "<path d=\"M13 21h8\"/> <path d=\"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z\"/>", "message-circle-plus": "<path d=\"M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719\"/> <path d=\"M8 12h8\"/> <path d=\"M12 8v8\"/>", "rotate-ccw": "<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/> <path d=\"M3 3v5h5\"/>", "columns-3-cog": "<path d=\"M10.6 21H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v5.6\"/> <path d=\"m14.305 19.53.923-.382\"/> <path d=\"M15 3v7.6\"/> <path d=\"m15.229 16.852-.924-.383\"/> <path d=\"m16.852 15.228-.383-.923\"/> <path d=\"m16.852 20.772-.383.924\"/> <path d=\"m19.148 15.228.383-.923\"/> <path d=\"m19.53 21.696-.382-.924\"/> <path d=\"m20.773 16.852.922-.383\"/> <path d=\"m20.773 19.148.922.383\"/> <path d=\"M9 3v18\"/> <circle cx=\"18\" cy=\"18\" r=\"3\"/>", "circle-x": "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <path d=\"m15 9-6 6\"/> <path d=\"m9 9 6 6\"/>", "settings": "<path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"/> <circle cx=\"12\" cy=\"12\" r=\"3\"/>", "fingerprint-pattern": "<path d=\"M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4\"/> <path d=\"M14 13.12c0 2.38 0 6.38-1 8.88\"/> <path d=\"M17.29 21.02c.12-.6.43-2.3.5-3.02\"/> <path d=\"M2 12a10 10 0 0 1 18-6\"/> <path d=\"M2 16h.01\"/> <path d=\"M21.8 16c.2-2 .131-5.354 0-6\"/> <path d=\"M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2\"/> <path d=\"M8.65 22c.21-.66.45-1.32.57-2\"/> <path d=\"M9 6.8a6 6 0 0 1 9 5.2v2\"/>", "square-pen": "<path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/> <path d=\"M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z\"/>"};
 const Ic=({n,s=16,w=1.8})=><svg aria-hidden="true" width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 block" dangerouslySetInnerHTML={{__html:LUCIDE[n]}}/>;
 const TT=({n,s=16,children})=><span className="inline-flex items-center gap-2"><Ic n={n} s={s}/>{children}</span>;   // 圖示＋標題文字（間距 8px、垂直置中）
 const TAB_ICONS=['wallet','chart-no-axes-combined','target','notebook-pen'];
@@ -549,12 +549,13 @@ function NumBox({value,onChange,className='w-32 h-9 px-3 text-sm',autoFocus,dec}
 }
 const Num=({label,value,onChange,dec})=>(<label className="flex items-center justify-between gap-3 py-1.5 text-sm"><span className="flex-1 min-w-0 truncate">{label}</span><NumBox value={value} onChange={onChange} dec={dec}/></label>);
 const Txt=({value,onChange,ph,className=''})=><input value={value} placeholder={ph} onChange={e=>onChange(e.target.value)} className={`h-9 rounded-lg border border-neutral-200 px-3 text-sm bg-white min-w-0 ${className}`}/>;
-const Btn=({onClick,danger,gray,red,children})=><button onClick={onClick} className={`px-3 h-8 rounded-lg border text-xs font-medium shrink-0 ${red?'bg-red-500 border-red-500 text-white':gray?'bg-neutral-200 border-neutral-200':'bg-white border-neutral-200'} ${danger&&!red?'text-red-600':''}`}>{children}</button>;
+const Btn=({onClick,danger,gray,red,label,children})=><button onClick={onClick} aria-label={label} title={label} className={`px-3 h-8 rounded-lg border text-xs font-medium shrink-0 ${red?'bg-red-500 border-red-500 text-white':gray?'bg-neutral-200 border-neutral-200':'bg-white border-neutral-200'} ${danger&&!red?'text-red-600':''}`}>{children}</button>;
+const BI=({n,label,s=16,...p})=><Btn {...p} label={label}><Ic n={n} s={s}/></Btn>;   // 圖示按鈕（無文字，保留 aria-label）
 const Row=({l,v})=><div className="flex items-center justify-between py-1.5 text-sm"><span>{l}</span><span className="text-zinc-600">{fmt(v)}</span></div>;
 function Sheet({title,icon,onClose,children}) {
   return (<div className="fixed inset-0 z-40 bg-black/30 flex items-end justify-center px-3" style={{paddingBottom:'calc(38px + env(safe-area-inset-bottom,0px))'}} onClick={onClose}>
     <div className="bg-white w-full max-w-[393px] max-h-[75vh] overflow-y-auto rounded-2xl p-5" onClick={e=>e.stopPropagation()}>
-      <div className="flex items-center justify-between mb-3"><div className="text-base font-semibold">{icon?<TT n={icon} s={18}>{title}</TT>:title}</div><button onClick={onClose} className="text-sm text-zinc-500">關閉</button></div>
+      <div className="flex items-center justify-between mb-3"><div className="text-base font-semibold">{icon?<TT n={icon} s={18}>{title}</TT>:title}</div><button onClick={onClose} aria-label="關閉" className="text-zinc-500"><Ic n="circle-x" s={20}/></button></div>
       {children}
     </div></div>);
 }
@@ -575,7 +576,7 @@ function CalcPad({cfg,onClose}) {
       <div className="text-right text-xs text-zinc-400 h-5">{pv!=null?'= '+addCommas(String(pv)):''}</div>
       <div className="grid grid-cols-4 gap-2 mt-2">
         {keys.map(k=><button key={k} onClick={()=>press(k)} className={`h-12 rounded-lg text-lg font-medium ${/[÷×−+=]/.test(k)?'bg-neutral-200':'bg-neutral-100'}`}>{k}</button>)}
-        <button onClick={done} className="h-12 rounded-lg text-sm font-semibold bg-black text-white">完成</button>
+        <button onClick={done} aria-label="完成" className="h-12 rounded-lg bg-black text-white flex items-center justify-center"><Ic n="circle-check" s={22}/></button>
       </div>
     </div></div>);
 }
@@ -588,11 +589,11 @@ function FireCard({d,c,onClick}) {
     return (<div className={first?'mt-3':'mt-4'}><div className="flex items-baseline justify-between gap-2"><span className="text-sm font-semibold">{name}<span className="font-normal text-zinc-400">{sub}</span></span><Fit className="text-xs text-zinc-500 max-w-[55%]">目標 {fmt(t.target)}</Fit></div>
       <Fit className="text-sm font-semibold mt-2">達成率 {t.pct.toFixed(2)}%｜{tx}</Fit><Bar pct={t.pct} color={color}/></div>); };
   const strip=(name,k)=><div className="text-xs text-zinc-600 mt-1 whitespace-normal leading-5">{name}：{SCEN.map(([key,l])=>`${l} ${fireWhen(f.sc[key][k],d).replace(/（.*）/,'')}`).join('｜')}</div>;
-  return (<Card className="p-4 cursor-pointer" onClick={onClick}><div className="flex items-baseline justify-between gap-2"><span className="text-sm font-semibold"><TT n="flame">FIRE 倒數計時</TT></span><span className="flex items-center gap-1.5"><span className="text-xs text-zinc-500">{sn}情境</span><button type="button" aria-label="FIRE 假設說明" onClick={e=>{e.stopPropagation();setInfo(v=>!v);}} className={`w-5 h-5 rounded-full border text-[11px] leading-none ${info?'bg-black text-white border-black':'border-neutral-300 text-zinc-500'}`}>i</button></span></div>
+  return (<Card className="p-4"><div className="flex items-baseline justify-between gap-2"><span className="text-sm font-semibold"><TT n="flame">FIRE 倒數計時</TT></span><span className="flex items-center gap-1.5"><span className="text-xs text-zinc-500">{sn}情境</span><button type="button" aria-label="FIRE 假設說明" onClick={e=>{e.stopPropagation();setInfo(v=>!v);}} className={`w-5 h-5 rounded-full border text-[11px] leading-none ${info?'bg-black text-white border-black':'border-neutral-300 text-zinc-500'}`}>i</button><button type="button" aria-label="FIRE 設定" onClick={e=>{e.stopPropagation();onClick&&onClick();}} className="text-zinc-500 self-center"><Ic n="settings" s={18}/></button></span></div>
     {row('Lean FIRE ','(僅必要開銷)',f.lean,'bg-green-500',true)}{row('Real FIRE ','',f.real,'bg-blue-500')}
     <div className="mt-3 pt-2 border-t-[0.5px] border-neutral-200">{strip('Lean','lean')}{strip('Real','real')}</div>
     {info&&<div className="mt-2 p-2.5 rounded-lg bg-neutral-50" onClick={e=>e.stopPropagation()}><div className="text-[10px] text-zinc-500 whitespace-normal leading-4">假設：股票名目報酬 {f.ret}%（扣成本 {cf.cost}%、稅費 {cf.tax}%）、存款取帳戶利率 {f.depRate.toFixed(1)}%，再扣通膨 {cf.infl}%，整體實質報酬約 {f.br.toFixed(1)}%；目標 = 年支出 ÷ {cf.swr}%，以今日幣值計算；每月投入與獎金為固定名目金額，會依通膨折算。計入資產 {fmt(f.assets.total)}{f.assets.total!==c.total?`（總資產 ${fmt(c.total)}）`:''}。</div>
-<div className="text-[10px] text-zinc-400 mt-1">點按卡片可切換情境、設定假設與納入資產</div></div>}</Card>);
+<div className="text-[10px] text-zinc-400 mt-1">點右上角設定圖示可切換情境、設定假設與納入資產</div></div>}</Card>);
 }
 function FundCard({d,fund}) {
   const fc=fundCalc(d,fund);
@@ -700,7 +701,8 @@ function PageMy({d,setD,fund,c,mom}) {
   return (<div className="pt-[17px] flex flex-col gap-4">
     <div className="flex gap-3 overflow-x-auto no-sb pl-4 snap-x scroll-pl-4">
       {cards.map((cd,i)=>(
-        <Card key={i} onClick={()=>cd[4]&&setSheet(cd[4])} className={`w-[calc((100%-28px)/2)] h-28 p-4 shrink-0 grow-0 snap-start flex flex-col justify-center gap-1.5 ${cd[4]?'cursor-pointer active:bg-neutral-50':''}`}>
+        <Card key={i} onClick={()=>cd[4]&&setSheet(cd[4])} className={`relative w-[calc((100%-28px)/2)] h-28 p-4 shrink-0 grow-0 snap-start flex flex-col justify-center gap-1.5 ${cd[4]?'cursor-pointer active:bg-neutral-50':''}`}>
+          {cd[4]&&<span className="absolute right-3 top-3 text-zinc-400"><Ic n="fingerprint-pattern" s={16}/></span>}
           <div className="text-sm font-semibold leading-5">{cd[0]}</div>
           <Fit className="text-xl font-semibold leading-7">{cd[1]}</Fit>
           {cd[2]? <Fit className="text-xs font-semibold leading-4"><span className="text-zinc-500">{cd[2]}</span>{'   '}{cd[3]}</Fit>
@@ -712,7 +714,7 @@ function PageMy({d,setD,fund,c,mom}) {
     <FundCard d={d} fund={fund}/>
     <FireCard d={d} c={c} onClick={()=>setSheet('fire')}/>
     <Card className="relative overflow-hidden" style={{height:288}}>
-      <button onClick={()=>setRec(true)} className="absolute right-3 top-3 px-3 h-7 rounded-lg border border-neutral-200 bg-white text-xs font-medium">管理紀錄</button>
+      <button onClick={()=>setRec(true)} aria-label="管理紀錄" className="absolute right-3 top-3 px-2.5 h-7 rounded-lg border border-neutral-200 bg-white flex items-center"><Ic n="columns-3-cog" s={16}/></button>
       <svg viewBox="0 0 361 288" width="100%" height="288" fontFamily="Inter" onClick={()=>setTip(null)}>
         <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2563eb" stopOpacity=".15"/><stop offset="1" stopColor="#2563eb" stopOpacity="0"/></linearGradient></defs>
         <svg x="16" y="14" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" dangerouslySetInnerHTML={{__html:LUCIDE['trending-up']}}/>
@@ -754,7 +756,7 @@ function PageMy({d,setD,fund,c,mom}) {
       const Ex=({on,onChange,label,right})=><label className={`flex items-center justify-between gap-2 py-1.5 text-sm ${depOn?'':'opacity-40'}`}><span className="flex items-center gap-2"><input type="checkbox" className="accent-red-500" disabled={!depOn} checked={!!on&&depOn} onChange={e=>onChange(e.target.checked)}/>{label}</span>{right}</label>;
       return <Sheet title="FIRE 設定" onClose={()=>{setSheet(null);setFEdit(false);}}>
       <div className="text-xs text-zinc-500 whitespace-normal leading-5 mb-2">FIRE 目標 = 年支出 ÷ 安全提領率，以今日幣值計算。報酬以實質年化報酬率複利；每月投入與年獎金視為固定名目金額，會依通膨折算成今日幣值後才加入；模擬假設：年獎金平均分攤到每個月（未來目標的提撥則依獎金實際入帳月計算）。Lean 只算必要開銷；Real 含選擇消費（娛樂、旅遊等）。</div>
-      <div className="flex items-center justify-between mt-1"><div className="text-sm font-semibold">情境</div><Btn onClick={()=>setFEdit(v=>!v)}>{fEdit?'完成':'編輯'}</Btn></div>
+      <div className="flex items-center justify-between mt-1"><div className="text-sm font-semibold">情境</div><BI n={fEdit?'circle-check':'pen-line'} label={fEdit?'完成':'編輯'} onClick={()=>setFEdit(v=>!v)}/></div>
       <div className="flex gap-2 mt-1.5">{SCEN.map(([k,l])=><Btn key={k} gray={f.scen===k} onClick={()=>setF({scen:k})}>{l}</Btn>)}</div>
       <div className="mt-2 border border-neutral-200 rounded-lg overflow-hidden text-xs">
         <div className="grid grid-cols-[3.2em_1fr_1fr_1fr] gap-1 px-2 py-1.5 bg-neutral-50 text-zinc-500"><span/><span className="text-right">名目</span><span className="text-right">實質</span><span className="text-right">Real 達成</span></div>
@@ -807,6 +809,17 @@ const Acc=({title,sub,right,open,onToggle,children})=>(
     {open&&<div className="px-4 pb-4">{children}</div>}
   </Card>);
 const fmtC=(n,cur)=>cur==='USD'?(HIDE?'••••':'US$'+Math.round(n*100/100).toLocaleString('en-US',{maximumFractionDigits:2})):fmt(n);
+function RecForm({h,accounts,onSave,onClose}) {   // 新增定期定額：金額、扣款日、扣款帳戶（必選）
+  const [total,setTotal]=useState(0), [day,setDay]=useState(5), [acct,setAcct]=useState('');
+  const sel="h-10 w-full rounded-lg border border-neutral-200 px-3 text-sm bg-white";
+  return (<Sheet title={`新增定期定額・${h.ticker}`} icon="calendar-sync" onClose={onClose}><div className="flex flex-col gap-3">
+    <div><div className="text-xs text-zinc-500 mb-1">每月金額（{h.cur}）</div><NumBox value={total} onChange={setTotal} className="w-full h-10 px-3 text-sm text-left"/></div>
+    <div><div className="text-xs text-zinc-500 mb-1">每月扣款日</div><select value={day} onChange={e=>setDay(+e.target.value)} className={sel}>{Array.from({length:28},(_,i)=>i+1).map(n=><option key={n} value={n}>{n} 號</option>)}</select></div>
+    <div><div className="text-xs text-zinc-500 mb-1">扣款帳戶（必選）</div><select value={acct} onChange={e=>setAcct(e.target.value)} className={sel}><option value="">請選擇</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+    <div className="text-[10px] text-zinc-400 whitespace-normal leading-4">到扣款日開啟 app 時會提醒是否自動記載買進並從帳戶扣款。設定後不能就地修改，要改請刪除後重新新增。</div>
+    <SaveBtn disabled={!(total>0)||!acct} onClick={()=>{onSave({total,day,acct});onClose();}}/>
+  </div></Sheet>);
+}
 function StockForm({kind,d,hid,onSubmit,onClose}) {
   const isNew=kind==='new', h=hid?d.holdings.find(x=>x.id===hid):null;
   const [ticker,setTicker]=useState(''), [cur0,setCur]=useState('TWD'), [shares,setShares]=useState(0), [price,setPrice]=useState(0), [cost,setCost]=useState(0), [amt,setAmt]=useState(0), [date,setDate]=useState(todayISO()), [type,setType]=useState(isNew?'buy':kind), [acct,setAcct]=useState(''), [link,setLink]=useState(false), [fee,setFee]=useState(null), [tax,setTax]=useState(null), [pt,setPt]=useState('stock');
@@ -858,7 +871,7 @@ function DatePicker({value,onPick,onClose,clearable}) {   // 自訂日期選擇�
   const stop=e=>e.stopPropagation();
   return ReactDOM.createPortal(<div className="fixed inset-0 z-50 bg-black/30 flex items-end justify-center px-3" style={{paddingBottom:'calc(38px + env(safe-area-inset-bottom,0px))'}} onClick={e=>{stop(e);onClose();}}>
     <div className="bg-white w-full max-w-[393px] rounded-2xl p-5" onClick={stop}>
-      <div className="flex items-center justify-between mb-3"><div className="text-base font-semibold">選擇日期</div><button type="button" onClick={onClose} className="text-sm text-zinc-500">關閉</button></div>
+      <div className="flex items-center justify-between mb-3"><div className="text-base font-semibold">選擇日期</div><button type="button" onClick={onClose} aria-label="關閉" className="text-zinc-500"><Ic n="circle-x" s={20}/></button></div>
       <div className="flex items-center justify-between gap-2 mb-2">
         <button type="button" onClick={()=>go(-1)} aria-label="上個月" className="w-9 h-9 rounded-lg border border-neutral-200 text-lg leading-none">‹</button>
         <div className="flex gap-2"><select value={vy} onChange={e=>setVy(+e.target.value)} className={sel}>{years.map(y=><option key={y} value={y}>{y} 年</option>)}</select>
@@ -902,7 +915,7 @@ function FireSim({d,c}) {
       <Fit className={`text-xs font-semibold ${cmp.includes('提早')||cmp.includes('可行')?'text-green-600':cmp.includes('延後')?'text-red-500':'text-zinc-500'}`}>{cmp||'\u00A0'}</Fit></div>); };
   const Sl=(label,k,max,st,show)=>(<div className="mt-3"><div className="flex justify-between text-xs"><span className="text-zinc-500">{label}</span><span className="font-semibold">{show}</span></div>
     <input type="range" min="0" max={max} step={st} value={sim[k]} onChange={e=>setOv(o=>({...o,[k]:Number(e.target.value)}))} className="w-full"/></div>);
-  return (<Card className="mx-4 mt-6 p-4"><div className="flex items-center justify-between"><div className="text-sm font-semibold"><TT n="flame">FIRE 模擬器</TT></div><Btn onClick={()=>setOv({})}>重設</Btn></div>
+  return (<Card className="mx-4 mt-6 p-4"><div className="flex items-center justify-between"><div className="text-sm font-semibold"><TT n="flame">FIRE 模擬器</TT></div><BI n="rotate-ccw" label="重設" onClick={()=>setOv({})}/></div>
     <div className="mt-3 flex gap-3">{out('Lean FIRE 預期退休',f.lean,base.lean)}{out('Real FIRE 預期退休',f.real,base.real)}</div>
     {Sl('每月投入金額','monthly',Math.max(200000,Math.round(base.monthly*3)),1000,fmt(sim.monthly))}
     {Sl('預估年化報酬率（名目，成本稅費通膨另計）','ret',15,0.5,sim.ret+'%')}
@@ -938,7 +951,8 @@ function PageDetail({d,setD,c}) {
   const setHold=(id,patch)=>setD(p=>({...p,holdings:p.holdings.map(h=>h.id===id?{...h,...patch}:h)}));
   const recOf=h=>(d.recurring||[]).filter(r=>String(r.ticker||'').trim().toUpperCase()===h.ticker);   // 定期定額依代號歸屬到持股
   const setRec=(rid,patch)=>setD(p=>({...p,recurring:(p.recurring||[]).map(r=>r.id===rid?{...r,...patch}:r)}));
-  const addRec=h=>setD(p=>({...p,recurring:[...(p.recurring||[]),{id:uid(),ticker:h.ticker,cur:h.cur,price:0,shares:0,total:0,acct:'',day:5,lastYM:todayISO().slice(0,7)}]}));
+  const [fxEdit,setFxEdit]=useState(false), [tradeAll,setTradeAll]=useState({}), [recForm,setRecForm]=useState(null);
+  const addRec=(h,v)=>setD(p=>({...p,recurring:[...(p.recurring||[]),{id:uid(),ticker:h.ticker,cur:h.cur,price:0,shares:0,total:v.total,acct:v.acct,day:v.day,lastYM:todayISO().slice(0,7)}]}));   // 新增後以單筆呈現（不可就地編輯，要改就刪除重建）
   const delRec=rid=>{ if(confirm('停止這筆定期定額？（只刪除設定，已記載的交易不受影響）')) setD(p=>({...p,recurring:(p.recurring||[]).filter(r=>r.id!==rid)})); };
   const delHold=h=>{ if(confirm('刪除持股「'+h.ticker+'」的所有紀錄？\n（只刪除持股紀錄，不會回沖銀行餘額；要回沖請先逐筆刪除交易）')) setD(p=>({...p,holdings:p.holdings.filter(x=>x.id!==h.id)})); };
   const doTrade=sp0=>{ const sp={...sp0,date:dateOrToday(sp0.date)}; const r=applyTrade(d,sp); if(r.err){alert(r.err);return false;} setD(p=>{const r2=applyTrade(p,sp);return r2.err?p:r2.p;}); return true; };
@@ -982,9 +996,9 @@ function PageDetail({d,setD,c}) {
         <i className="w-2.5 h-2.5 rounded-full" style={{background:col}}/><span className="font-medium">{l}</span><Fit className="min-w-0">{fmt(v)}</Fit><span className="text-zinc-500 text-right">{c.total>0?Math.round(v/c.total*100):0}%</span></div>))}</div>
     </Card>
 
-    <Acc title={<TT n="landmark">銀行帳戶</TT>} sub={`本月利息 ${fmt(c.mInterest)} · 預估年息 ${fmt(c.interest)}`} open={sec.bank} onToggle={()=>tsec('bank')} right={<Btn onClick={addAcc}>＋ 新增</Btn>}>
-      {d.accounts.map(ac=>{const inf=acctInfo(ac);return (
-        <div key={ac.id} className="border-b-[0.5px] border-neutral-300">
+    <Acc title={<TT n="landmark">銀行帳戶</TT>} sub={`本月利息 ${fmt(c.mInterest)} · 預估年息 ${fmt(c.interest)}`} open={sec.bank} onToggle={()=>tsec('bank')} right={<BI n="message-circle-plus" label="新增" onClick={addAcc}/>}>
+      {d.accounts.map((ac,ai)=>{const inf=acctInfo(ac);return (
+        <div key={ac.id} className={ai<d.accounts.length-1?'border-b-[0.5px] border-neutral-300':''}>
           <div className="h-14 grid grid-cols-[104px_1fr_1fr_20px] gap-2 items-center cursor-pointer" onClick={()=>tog(ac.id)}>
             <div className="min-w-0 flex items-center gap-1"><Fit className="text-xs font-medium min-w-0">{ac.name}</Fit>{(()=>{ const tg=[[inf.tag,inf.tag==='生息'?'生':'普',inf.tag==='生息'?'bg-green-100 text-green-700':'bg-neutral-100 text-zinc-500'],...(ac.fixed>0?[['定存','定','bg-green-700 text-white']]:[]),...(d.fundPayAcct===ac.id?[['基金出金','未','bg-orange-100 text-orange-700']]:[])], one=tg.length>2;   // 超過兩個標籤時只顯示一個字
         const shortCls={生:'bg-green-100 text-green-700',定:'bg-green-700 text-white',未:'bg-orange-400 text-white',普:'bg-neutral-200 text-zinc-600'};
@@ -1008,43 +1022,42 @@ function PageDetail({d,setD,c}) {
         </div>);})}
     </Acc>
 
-    <Acc title={<TT n="chart-candlestick">股票持股</TT>} sub={`${d.holdings.length} 檔 · 總市值 ${fmt(mvAll)}`} open={sec.stock} onToggle={()=>tsec('stock')} right={<Btn onClick={e=>{e.stopPropagation();setStForm({kind:'new'});}}>＋ 新增</Btn>}>
-      <Num label="美元匯率（USD→TWD）" value={d.fx||32} onChange={v=>setD(p=>({...p,fx:v}))}/>
+    <Acc title={<TT n="chart-candlestick">股票持股</TT>} sub={`${d.holdings.length} 檔 · 總市值 ${fmt(mvAll)}`} open={sec.stock} onToggle={()=>tsec('stock')} right={<Btn onClick={e=>{e.stopPropagation();setStForm({kind:'new'});}} label="新增"><Ic n="message-circle-plus" s={16}/></Btn>}>
       {!d.holdings.length&&<div className="text-xs text-zinc-400 py-3 whitespace-normal">尚無持股。按「新增持股」，或在每月記帳選「投資」類別買股，會自動建立。現價為手動輸入（無即時報價）。</div>}
       {hsorted.map((h,i)=>{const v=holdVals(h);return (
-        <div key={h.id}>{(i===0||hsorted[i-1].cur!==h.cur)&&<div className="text-xs font-semibold text-zinc-500 pt-2">{h.cur==='USD'?'美股':'台股'}</div>}<div className={`border-b-[0.5px] border-neutral-300 ${open['h'+h.id]?'bg-neutral-100/60 rounded-lg px-2 my-1':''}`}>
+        <div key={h.id}>{(i===0||hsorted[i-1].cur!==h.cur)&&<div className="flex items-center gap-2 pt-2 text-xs font-semibold text-zinc-500"><span>{h.cur==='USD'?'美股':'台股'}</span>{h.cur==='USD'&&<span className="flex items-center gap-1 font-normal text-zinc-400">{fxEdit?<><span>匯率 $</span><NumBox autoFocus dec={3} value={d.fx||32} onChange={v=>setD(p=>({...p,fx:v}))} className="w-16 h-7 px-1 text-xs"/></>:<span>匯率 ${d.fx||32}</span>}<button type="button" aria-label="編輯匯率" onClick={()=>setFxEdit(v=>!v)} className="text-zinc-400"><Ic n={fxEdit?'circle-check':'square-pen'} s={14}/></button></span>}</div>}<div className={`${(i===hsorted.length-1||hsorted[i+1].cur!==h.cur)?'':'border-b-[0.5px] border-neutral-300'} ${open['h'+h.id]?'bg-neutral-100/60 rounded-lg px-2 my-1':''}`}>
           <div className="py-2 flex items-center gap-2 cursor-pointer" onClick={()=>tog('h'+h.id)}>
-            <div className="flex-1 min-w-0"><Fit className="text-sm font-semibold">{h.ticker}</Fit><Fit className="text-[11px] text-zinc-500"><span className="inline-block w-[3em]">{h.cur}</span>{Math.round(v.sh*1000)/1000} 股 · 均價 {Math.round(v.avg*100)/100}{recOf(h).length>0&&' · 定期定額'}</Fit></div>
+            <div className="flex-1 min-w-0"><div className="flex items-center gap-1.5 min-w-0"><Fit className="text-sm font-semibold min-w-0">{h.ticker}</Fit>{recOf(h).length>0&&<span className="text-[8px] leading-4 px-1 rounded shrink-0 bg-blue-100 text-blue-700">定</span>}</div><Fit className="text-[11px] text-zinc-500"><span className="inline-block w-[3em]">{h.cur}</span>{Math.round(v.sh*1000)/1000} 股 · 均價 {Math.round(v.avg*100)/100}</Fit></div>
             <div className="w-[130px] min-w-0"><Fit className="text-sm font-semibold">{fmtC(v.mv,h.cur)}</Fit><Fit className={`text-[11px] font-medium ${v.pl>=0?'text-green-700':'text-red-600'}`}>{v.pl>=0?'+':''}{fmtC(v.pl,h.cur)}（{v.plPct.toFixed(1)}%）</Fit></div>
             <Chev open={open['h'+h.id]}/>
           </div>
           {open['h'+h.id]&&<div className="pb-3">
             <Num label={`現價（${h.cur}）`} value={h.price} onChange={v2=>setHold(h.id,{price:v2})}/>
             {h.cur==='TWD'&&<label className="flex items-center justify-between gap-3 py-1.5 text-sm"><span className="flex-1 min-w-0 truncate">商品類型（賣出交易稅預設）</span><select value={h.ptype||'stock'} onChange={e=>setHold(h.id,{ptype:e.target.value})} className="h-9 rounded-lg border border-neutral-200 px-2 text-sm bg-white">{PTYPES.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>}
-            <div className="flex justify-between text-xs mt-1"><span className="font-semibold text-zinc-500">已實現損益</span><span className={v.realized>=0?'text-green-700':'text-red-600'}>{v.realized>=0?'+':''}{fmtC(v.realized,h.cur)}</span></div>
-            <div className="text-xs font-semibold text-zinc-500 mt-1">交易紀錄　股息累計 {fmtC(v.div,h.cur)}</div>
-            {[...h.trades].sort((x,y)=>y.date.localeCompare(x.date)).map(t=>(<div key={t.id} className="flex items-center gap-2 py-1 text-xs border-b-[0.5px] border-neutral-200">
-              <span className="w-[70px] text-center">{fmtDate(t.date)}</span><span className={`w-9 font-medium ${t.type==='buy'?'text-red-600':t.type==='sell'?'text-green-700':'text-blue-600'}`}>{t.type==='buy'?'買進':t.type==='sell'?'賣出':'股息'}</span>
-              <Fit className="flex-1 min-w-0 text-zinc-600">{t.type==='div'?fmtC(t.amt,h.cur):`${Math.round(t.shares*1000)/1000} 股 @ ${Math.round(t.price*100)/100}${t.fee?` 費${Math.round(t.fee*100)/100}`:''}${t.tax?` 稅${Math.round(t.tax*100)/100}`:''}`}</Fit>
-              {t.acct&&t.cashT?<span className="shrink-0 px-1 rounded bg-neutral-200 text-[9px] text-zinc-600">{t.cashT<0?'扣款':'入帳'}</span>:null}<button onClick={()=>delTrade(h.id,t.id)} className="text-zinc-400">✕</button></div>))}
-            <div className="flex items-center justify-between mt-2"><span className="text-xs font-semibold text-zinc-500"><TT n="calendar-sync">定期定額</TT></span><Btn gray onClick={()=>addRec(h)}>＋ 新增</Btn></div>
+            <div className="flex items-center justify-between mt-2"><span className="text-xs font-semibold text-zinc-500"><TT n="calendar-sync">定期定額</TT></span><BI gray n="message-circle-plus" label="新增定期定額" onClick={()=>setRecForm(h.id)}/></div>
             {!recOf(h).length&&<div className="text-[11px] text-zinc-400 py-1">尚未設定。設定後，每月到扣款日開啟 app 時會提醒是否自動記載買進並扣款。</div>}
-            {recOf(h).map(r=>(<div key={r.id} className="rounded-lg bg-white border border-neutral-200 px-2 py-1.5 mt-1">
-              {r.shares>0?<div className="text-xs py-1">每期 {Math.round(r.shares*1000)/1000} 股 @ {Math.round((r.price>0?r.price:r.total/r.shares)*100)/100}（{h.cur}）</div>
-                :<Num label={`每月金額（${h.cur}）`} value={r.total||0} onChange={v2=>setRec(r.id,{total:v2})}/>}
-              <div className="flex items-center gap-2 py-1 text-xs">每月<select value={r.day} onChange={e=>setRec(r.id,{day:+e.target.value})} className="h-9 rounded-lg border border-neutral-200 px-2 bg-white">{Array.from({length:28},(_,i)=>i+1).map(n=><option key={n} value={n}>{n}</option>)}</select>號
-                <select value={r.acct||''} onChange={e=>setRec(r.id,{acct:e.target.value})} className="h-9 flex-1 min-w-0 rounded-lg border border-neutral-200 px-2 bg-white"><option value="">扣款帳戶（必選）</option>{d.accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select>
-                <button aria-label="停止定期定額" onClick={()=>delRec(r.id)} className="text-zinc-400 px-1">✕</button></div>
-              {!(r.total>0||r.shares>0)&&<div className="text-[11px] text-amber-700">請填每月金額，否則到期時無法記載。</div>}
-              {!r.acct&&<div className="text-[11px] text-amber-700">請選擇扣款帳戶，否則到期時無法記載。</div>}
-            </div>))}
+            {recOf(h).map(r=>{ const ac=d.accounts.find(a=>a.id===r.acct), amt=r.shares>0?`${Math.round(r.shares*1000)/1000} 股 @ ${Math.round((r.price>0?r.price:r.total/r.shares)*100)/100}`:(r.total>0?fmtC(r.total,h.cur):'未填金額');
+              return (<div key={r.id} className="flex items-center gap-2 py-1 text-xs border-b-[0.5px] border-neutral-200">
+                <span className="w-[70px] text-center">每月 {r.day} 號</span><span className="w-9 font-medium text-blue-600">定額</span>
+                <Fit className="flex-1 min-w-0 text-zinc-600">{amt}・{ac?ac.name:'未選帳戶'}</Fit>
+                {(!(r.total>0||r.shares>0)||!ac)&&<span className="shrink-0 text-[9px] text-amber-700">資料不全</span>}
+                <button aria-label="停止定期定額" onClick={()=>delRec(r.id)} className="text-zinc-400">✕</button></div>); })}
+            <div className="flex justify-between text-xs mt-2"><span className="font-semibold text-zinc-500">已實現損益</span><span className={v.realized>=0?'text-green-700':'text-red-600'}>{v.realized>=0?'+':''}{fmtC(v.realized,h.cur)}</span></div>
+            <div className="flex justify-between text-xs mt-1"><span className="font-semibold text-zinc-500">股息累計</span><span>{fmtC(v.div,h.cur)}</span></div>
+            {(()=>{ const all=[...h.trades].sort((x,y)=>y.date.localeCompare(x.date)), more=all.length>3, shown=more&&!tradeAll[h.id]?all.slice(0,3):all; return <>
+              <div className="text-xs font-semibold text-zinc-500 mt-2">交易紀錄</div>
+              {shown.map(t=>(<div key={t.id} className="flex items-center gap-2 py-1 text-xs border-b-[0.5px] border-neutral-200">
+                <span className="w-[70px] text-center">{fmtDate(t.date)}</span><span className={`w-9 font-medium ${t.type==='buy'?'text-red-600':t.type==='sell'?'text-green-700':'text-blue-600'}`}>{t.type==='buy'?'買進':t.type==='sell'?'賣出':'股息'}</span>
+                <Fit className="flex-1 min-w-0 text-zinc-600">{t.type==='div'?fmtC(t.amt,h.cur):`${Math.round(t.shares*1000)/1000} 股 @ ${Math.round(t.price*100)/100}${t.fee?` 費${Math.round(t.fee*100)/100}`:''}${t.tax?` 稅${Math.round(t.tax*100)/100}`:''}`}</Fit>
+                {t.acct&&t.cashT?<span className="shrink-0 px-1 rounded bg-neutral-200 text-[9px] text-zinc-600">{t.cashT<0?'扣款':'入帳'}</span>:null}<button onClick={()=>delTrade(h.id,t.id)} className="text-zinc-400">✕</button></div>))}
+              {more&&<button onClick={()=>setTradeAll(o=>({...o,[h.id]:!o[h.id]}))} className="w-full text-center text-[11px] text-zinc-500 py-1.5">{tradeAll[h.id]?'收合':`顯示全部 ${all.length} 筆`}</button>}</>; })()}
             <div className="flex gap-2 mt-2"><Btn gray onClick={()=>setStForm({kind:'buy',hid:h.id})}>買進</Btn><Btn gray onClick={()=>setStForm({kind:'sell',hid:h.id})}>賣出</Btn><Btn gray onClick={()=>setStForm({kind:'div',hid:h.id})}>股息</Btn><Btn gray danger onClick={()=>delHold(h)}>刪除持股</Btn></div>
           </div>}
         </div></div>);})}
     </Acc>
 
     <Card className={`mx-4 mt-6 ${sec.alloc?'pb-4':''}`}>
-      <div className="px-4 h-14 flex items-center gap-2 cursor-pointer" onClick={()=>tsec('alloc')}><div className="flex-1 min-w-0"><div className="text-sm font-semibold leading-5"><TT n="sliders-horizontal">現金分配</TT></div>{!sec.alloc&&<div className="text-[11px] text-zinc-500 leading-4 truncate">開銷 {fmt(catSum(['必要開銷','選擇消費']))}・理財 {fmt(catSum(['投資理財','未來基金']))}</div>}</div><Btn onClick={e=>{e.stopPropagation();addCat();setSec(o=>({...o,alloc:true}));}}>＋ 新增</Btn><Chev open={sec.alloc}/></div>
+      <div className="px-4 h-14 flex items-center gap-2 cursor-pointer" onClick={()=>tsec('alloc')}><div className="flex-1 min-w-0"><div className="text-sm font-semibold leading-5"><TT n="sliders-horizontal">現金分配</TT></div>{!sec.alloc&&<div className="text-[11px] text-zinc-500 leading-4 truncate">開銷 {fmt(catSum(['必要開銷','選擇消費']))}・理財 {fmt(catSum(['投資理財','未來基金']))}</div>}</div><Btn onClick={e=>{e.stopPropagation();addCat();setSec(o=>({...o,alloc:true}));}} label="新增"><Ic n="message-circle-plus" s={16}/></Btn><Chev open={sec.alloc}/></div>
       {sec.alloc&&<>
       <div className="px-4">
         <div className="min-h-12 flex items-center gap-1 text-xs">
@@ -1072,7 +1085,7 @@ function PageDetail({d,setD,c}) {
                 <Txt value={it.name} onChange={v=>setItem(cat.id,it.id,{name:v})} className="flex-1"/>
                 <NumBox value={it.amt} onChange={v=>setItem(cat.id,it.id,{amt:v})} className="w-24 h-9 px-3 text-sm"/>
                 <Btn danger onClick={()=>delItem(cat.id,it.id)}>✕</Btn></div>))}
-              <Btn onClick={()=>addItem(cat.id)}>＋ 新增</Btn>
+              <BI n="message-circle-plus" label="新增" onClick={()=>addItem(cat.id)}/>
             </div>}
           </div>))}
         <div className="border-t-[0.5px] border-neutral-300 mt-1">
@@ -1080,7 +1093,7 @@ function PageDetail({d,setD,c}) {
             <span className="text-sm font-semibold flex-1">不定期獎金</span><Fit className="w-28 text-sm text-zinc-500">{fmt(bonusYear(d))}</Fit><Chev open={open.bonus}/></div>
           {open.bonus&&<div className="pb-2">
             <div className="text-[10px] text-zinc-400 leading-4 whitespace-normal mb-1">金額是「預期值」，會計入年薪與 FIRE 試算。實際領到時，請在每月記帳新增一筆「收入－獎金」留下紀錄。</div>
-            <div className="flex justify-end mb-1"><Btn red={bEdit} onClick={()=>setBEdit(e=>!e)}>{bEdit?'完成':'編輯'}</Btn></div>
+            <div className="flex justify-end mb-1"><BI n={bEdit?'circle-check':'pen-line'} label={bEdit?'完成':'編輯'} red={bEdit} onClick={()=>setBEdit(e=>!e)}/></div>
             {!d.bonuses.length&&<div className="text-xs text-zinc-400 py-2">尚無獎金{bEdit?'':'，按「編輯」新增'}</div>}
             {d.bonuses.map(b=>(<div key={b.id} className="py-2 border-b-[0.5px] border-neutral-200">
               {bEdit?<>
@@ -1092,14 +1105,14 @@ function PageDetail({d,setD,c}) {
                   <select value={i.cat||''} onChange={e=>setInj(b.id,i.id,{cat:e.target.value})} className="flex-1 min-w-0 h-9 rounded-lg border border-neutral-200 px-2 text-sm bg-white"><option value="">選擇分類</option>{d.allocation.map(x=><option key={x.id} value={x.label}>{x.label}</option>)}</select>
                   <NumBox value={i.ratio||0} onChange={v=>setInj(b.id,i.id,{ratio:Math.min(100,v)})} className="w-20 h-9 px-3 text-sm"/><span className="text-xs">%</span>
                   <Btn danger onClick={()=>delInj(b.id,i.id)}>✕</Btn></div>))}
-                <div className="mt-1.5"><Btn onClick={()=>addInj(b.id)}>＋ 新增</Btn></div>
+                <div className="mt-1.5"><BI n="message-circle-plus" label="新增" onClick={()=>addInj(b.id)}/></div>
               </>:<>
                 <div className="flex items-center gap-2 text-sm"><Fit className="flex-1 min-w-0 font-medium">{b.name||'（未命名）'}</Fit><Fit className="w-24 text-zinc-600">{fmt(b.amt)}</Fit><span className="text-xs text-zinc-500 w-16 text-right">{b.month} 月入帳</span></div>
                 {(b.inj||[]).map(i=><div key={i.id} className="text-[11px] text-zinc-500 pl-2 mt-0.5">→ {i.cat||'未選分類'} {i.ratio||0}%（{fmt(b.amt*(i.ratio||0)/100)}）</div>)}
                 {(()=>{const left=100-Math.min(100,sumBy(b.inj||[],i=>i.ratio||0)); return left>0&&b.amt>0?<div className="text-[11px] text-amber-600 pl-2 mt-0.5">尚有 {left}% 未分配（{fmt(b.amt*left/100)}）</div>:null;})()}
               </>}
             </div>))}
-            {bEdit&&<div className="mt-2"><Btn onClick={()=>setD(p=>({...p,bonuses:[...p.bonuses,{id:uid(),name:'',amt:0,month:12,inj:[]}]}))}>＋ 新增</Btn></div>}
+            {bEdit&&<div className="mt-2"><Btn onClick={()=>setD(p=>({...p,bonuses:[...p.bonuses,{id:uid(),name:'',amt:0,month:12,inj:[]}]}))} label="新增"><Ic n="message-circle-plus" s={16}/></Btn></div>}
           </div>}
         </div>
       </div>
@@ -1115,6 +1128,7 @@ function PageDetail({d,setD,c}) {
         {!hs2.length&&<div className="text-xs text-zinc-400">尚無持股</div>}</>;})()
       :(()=>{const k=pie==='定存'?'fixed':'demand';return <>{d.accounts.filter(a=>{ if(k==='fixed') return true; const hi=((a.m&&a.m.demand&&a.m.demand.rate)||0)>=DEAD_RATE; return pie==='高利活存'?hi:!hi; }).map(a=>{const m=(a.m&&a.m[k])||{};return <div key={a.id} className="flex justify-between gap-2 text-sm py-1.5 border-b-[0.5px] border-neutral-200"><span>{a.name}</span><span>{fmt(a[k])}<span className="text-[10px] text-zinc-400">　{m.rate||0}%{m.exp?` · 到期 ${fmtDate(m.exp)}`:''}</span></span></div>;})}</>;})()}
     </Sheet>}
+    {recForm&&(()=>{ const h=d.holdings.find(x=>x.id===recForm); return h?<RecForm h={h} accounts={d.accounts} onSave={v=>addRec(h,v)} onClose={()=>setRecForm(null)}/>:null; })()}
     {stForm&&<StockForm kind={stForm.kind} d={d} hid={stForm.hid} onSubmit={doTrade} onClose={()=>setStForm(null)}/>}
   </div>);
 }
@@ -1129,7 +1143,7 @@ function SwipeLeft({open,onOpen,onClose,onTap,actions,children}) {
     if(dX<-40) onOpen(); else if(dX>40||(open&&Math.abs(dX)<5)) onClose(); else if(!open&&onTap&&Math.abs(dX)<5) onTap();
   };
   return (<div className="relative overflow-hidden border-b-[0.5px] border-neutral-300" style={{touchAction:'pan-y'}}>
-    <div className="absolute right-0 top-0 bottom-0 flex">{actions.map(a=><button key={a.l} onClick={()=>{onClose();a.fn();}} className={`w-[72px] text-white text-xs font-medium ${a.c}`}>{a.l}</button>)}</div>
+    <div className="absolute right-0 top-0 bottom-0 flex">{actions.map(a=><button key={a.l} onClick={()=>{onClose();a.fn();}} aria-label={a.l} className={`w-[72px] text-white text-xs font-medium flex items-center justify-center ${a.c}`}>{a.icon?<Ic n={a.icon} s={18}/>:a.l}</button>)}</div>
     <div className="relative bg-white transition-transform duration-200" style={{transform:`translateX(${open?-W:0}px)`}} onPointerDown={down} onPointerUp={up} onPointerCancel={()=>{st.current=null;}}>{children}</div>
   </div>);
 }
@@ -1137,11 +1151,11 @@ function PageGoals({d,setD,fund}) {
   const [form,setForm]=useState(null);   // {kind:'goal'|'wish', id?}
   const [swp,setSwp]=useState(null);
   const [pri,setPri]=useState('mid'), [name,setName]=useState(''), [budget,setBudget]=useState(0), [gdate,setGdate]=useState(''), [gplace,setGplace]=useState('cash'), [gterm,setGterm]=useState('none');
-  const openForm=(kind,it)=>{setPri(it&&it.pri||'mid');setName(it?it.name:'');setBudget(it?it.budget:0);setGdate(it&&it.date||'');setGterm(!it||!it.date?'none':(it.est&&goalMonths(it)!=null)?termOfMonths(goalMonths(it)):'date');setGplace(it&&it.place==='invest'?'invest':'cash');setForm({kind,id:it&&it.id});};
+  const openForm=(kind,it)=>{setPri(it&&it.pri||'mid');setName(it?it.name:'');setBudget(it?it.budget:0);setGdate(it&&it.date||'');setGterm(!it?'mid':!it.date?'':(it.est&&goalMonths(it)!=null)?termOfMonths(goalMonths(it)):'date');setGplace(it&&it.place==='invest'?'invest':'cash');setForm({kind,id:it&&it.id});};
   const saveForm=()=>{
     const {kind,id}=form;
     if(kind==='goal'){ const o=id&&d.goals.find(x=>x.id===id); let date='',est=false;   // 短中長：換算成估計日期並標記 est；原本就是同一個估計等級則保留原日期，不會每次存檔就重算
-      if(gterm==='date') date=gdate; else if(gterm!=='none'){ est=true; const om=o&&o.est&&o.date?goalMonths(o):null; date=(om!=null&&termOfMonths(om)===gterm)?o.date:estISO(TERMS.find(x=>x[0]===gterm)[2]); }
+      if(gterm==='date') date=gdate; else if(gterm!==''&&gterm!=='none'){ est=true; const om=o&&o.est&&o.date?goalMonths(o):null; date=(om!=null&&termOfMonths(om)===gterm)?o.date:estISO(TERMS.find(x=>x[0]===gterm)[2]); }
       setD(p=>({...p,goals:id?p.goals.map(g=>g.id===id?{...g,name,pri,budget,date,est,place:gplace}:g):[...p.goals,{id:uid(),name,pri,budget,date,est,place:gplace}]})); }
     else setD(p=>({...p,wishlist:id?p.wishlist.map(w=>w.id===id?{...w,name,budget}:w):[...p.wishlist,{id:uid(),name,budget,done:false}]}));
     setForm(null);
@@ -1149,7 +1163,7 @@ function PageGoals({d,setD,fund}) {
   const payGoal=g=>{   // 支付：使用者按下才會動資料；從出金帳戶的活存扣掉預算（未來基金 = 該帳戶活存），並把項目標為完成
     const ac=d.accounts.find(a=>a.id===d.fundPayAcct), bud=g.budget||0;
     if(ac&&(ac.demand||0)<bud){ alert(`「${ac.name}」活存不足：「${g.name}」預算 ${fmt(bud)}，目前只有 ${fmt(ac.demand||0)}。\n不會標記為已支付，請先補足出金帳戶的活存，或調低項目預算。`); return; }
-    if(!confirm(ac?`「${g.name}」已支付 ${fmt(bud)}？\n將從「${ac.name}」的活存扣除${g.place==='invest'?'（投資項目請先把賣出持股的錢轉入這個帳戶；持股不會自動變動）':''}。`:`「${g.name}」標記為已支付？\n尚未指定出金帳戶，不會扣除任何帳戶餘額。`)) return;
+    if(!confirm(ac?`是否支付「${g.name}」${fmt(bud)}？\n將從「${ac.name}」的活存扣除${g.place==='invest'?'（投資項目請先把賣出持股的錢轉入這個帳戶；持股不會自動變動）':''}。`:`是否支付「${g.name}」？\n尚未指定出金帳戶，不會扣除任何帳戶餘額。`)) return;
     setD(p=>{ const a2=p.accounts.find(a=>a.id===p.fundPayAcct); if(a2&&(a2.demand||0)<bud) return p;   // 以最新資料再檢查一次：不足就不動任何資料
       return {...p,accounts:p.fundPayAcct?p.accounts.map(a=>a.id===p.fundPayAcct?{...a,demand:r2((a.demand||0)-bud)}:a):p.accounts,goals:p.goals.map(x=>x.id===g.id?{...x,done:true,paidAt:todayISO(),paid:bud}:x)}; });
   };
@@ -1190,26 +1204,26 @@ function PageGoals({d,setD,fund}) {
     </div>
     {!payAc&&<div className="mt-2 text-[11px] text-amber-600 whitespace-normal leading-4">尚未指定未來基金出金帳戶，未來基金金額為 0。到「資產細節 → 銀行帳戶」展開帳戶，勾選「未來基金出金帳戶」，未來基金就會等於該帳戶的活存餘額。</div>}
     {payAc&&<div className="mt-2 text-[11px] text-zinc-400 whitespace-normal leading-4">未來基金 = 「{payAc.name}」的活存餘額。</div>}
-    <div className="mt-6 flex items-center justify-between"><div className="text-sm font-semibold"><TT n="piggy-bank">未來基金項目</TT></div><Btn onClick={()=>openForm('goal')}>＋ 新增項目</Btn></div>
+    <div className="mt-6 flex items-center justify-between"><div className="text-sm font-semibold"><TT n="piggy-bank">未來基金項目</TT></div><BI n="message-circle-plus" label="新增項目" onClick={()=>openForm('goal')}/></div>
     <div className="mt-1">
       <div className={`${GR} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span/><span>項目</span><span className="text-center">預算</span><span className="text-center">狀態</span></div>
-      {sortedG.map(g=>{ const [stT,stC]=stOf(g); return (
-        <SwipeLeft key={g.id} open={swp===g.id} onOpen={()=>setSwp(g.id)} onClose={()=>setSwp(null)}
-          onTap={()=>openForm('goal',g)} actions={[...(g.done?[]:[{l:'支付',c:'bg-green-600',fn:()=>payGoal(g)}]),{l:'刪除',c:'bg-red-600',fn:()=>delGoal(g)}]}>
+      {sortedG.map(g=>{ const [stT,stC]=stOf(g), payable=!g.done&&GI[g.id]&&(GI[g.id].st==='ready'||GI[g.id].st==='due'); return (
+        <div key={g.id} className="border-b-[0.5px] border-neutral-300 cursor-pointer" onClick={()=>openForm('goal',g)}>
           <div className={`${GR} h-11`}>
             <i className="w-2.5 h-2.5 rounded-full" style={{background:g.done||(GI[g.id]&&GI[g.id].st==='ready')?'#22c55e':PRI[g.pri].c}}/>
             <div className="min-w-0"><Fit className={`text-xs font-medium min-w-0 ${g.done?'text-zinc-400 line-through':''}`}>{g.name}</Fit><Fit className="text-[9px] text-zinc-400 min-w-0 leading-3">{subOf(g)}</Fit></div>
             <Fit center className="text-[10px] font-medium text-zinc-500 min-w-0 text-center">{fmt(g.budget)}</Fit>
-            <Fit center className={`text-[10px] font-medium min-w-0 text-center ${stC}`}>{stT}</Fit>
+            {payable?<button type="button" aria-label={`支付「${g.name}」`} onClick={e=>{e.stopPropagation();payGoal(g);}} className="min-w-0 h-full"><Fit center className={`text-[10px] font-medium min-w-0 text-center underline decoration-dotted underline-offset-2 ${stC}`}>{stT}</Fit></button>
+              :<Fit center className={`text-[10px] font-medium min-w-0 text-center ${stC}`}>{stT}</Fit>}
           </div>
-        </SwipeLeft>); })}
+        </div>); })}
     </div>
-    <div className="mt-6 flex items-center justify-between"><div className="text-sm font-semibold"><TT n="gift">願望清單</TT></div><Btn onClick={()=>openForm('wish')}>＋ 新增項目</Btn></div>
+    <div className="mt-6 flex items-center justify-between"><div className="text-sm font-semibold"><TT n="gift">願望清單</TT></div><BI n="message-circle-plus" label="新增項目" onClick={()=>openForm('wish')}/></div>
     <div className="mt-1">
       <div className={`${WR} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span>願望</span><span>預算</span><span className="text-center">達成</span></div>
       {wishes.map(w=>(
         <SwipeLeft key={w.id} open={swp===w.id} onOpen={()=>setSwp(w.id)} onClose={()=>setSwp(null)}
-          actions={[{l:'編輯',c:'bg-blue-600',fn:()=>openForm('wish',w)},{l:'刪除',c:'bg-red-600',fn:()=>delWish(w)}]}>
+          actions={[{l:'編輯',icon:'pen-line',c:'bg-blue-600',fn:()=>openForm('wish',w)},{l:'刪除',c:'bg-red-600',fn:()=>delWish(w)}]}>
           <div className={`${WR} h-10`}>
             <Fit className={`text-xs font-medium min-w-0 ${w.done?'text-zinc-400 line-through':''}`}>{w.name}</Fit>
             <Fit className="text-[10px] font-medium text-zinc-500 min-w-0">{fmt(w.budget)}</Fit>
@@ -1224,14 +1238,15 @@ function PageGoals({d,setD,fund}) {
           <div className="flex gap-2">{Object.entries(PRI).map(([k,v])=><Pill key={k} on={pri===k} color={v.c} onClick={()=>setPri(k)}>{v.l}</Pill>)}</div></div>}
         <Txt value={name} onChange={setName} ph="項目名稱" className="h-10"/>
         <div><div className="text-xs text-zinc-500 mb-1">預算金額</div><NumBox value={budget} onChange={setBudget} className="w-full h-10 px-3 text-sm text-left"/></div>
-        {form.kind==='goal'&&<div><div className="text-xs text-zinc-500 mb-1">預計使用時間（選填）</div>
-          <div className="flex gap-1.5 flex-wrap">{[['short','短期'],['mid','中期'],['long','長期'],['date','指定日期'],['none','不確定']].map(([k,l])=><Pill key={k} on={gterm===k} onClick={()=>setGterm(k)}>{l}</Pill>)}</div>
+        {form.kind==='goal'&&<div><div className="text-xs text-zinc-500 mb-1">預計使用時間</div>
+          <div className="flex gap-1.5 flex-wrap">{[['short','短期'],['mid','中期'],['long','長期'],['date','指定日期']].map(([k,l])=><Pill key={k} on={gterm===k} onClick={()=>setGterm(k)}>{l}</Pill>)}</div>
           {gterm==='date'&&<div className="mt-2"><DateBox clearable value={gdate} onChange={setGdate}/></div>}
-          <div className="text-[10px] text-zinc-400 mt-1 whitespace-normal leading-4">{gterm==='none'?'不確定的目標暫不參與 FIRE 試算。':gterm==='date'?'有確切日期時使用。':'系統會換算成約 '+TERMS.find(x=>x[0]===gterm)[2]+' 年後的估計日期（列表顯示「約」），之後可改成指定日期。'}短期 2 年內、中期 2–5 年、長期 5 年以上。目標的金額由「未來基金」依優先級、日期自動分配。</div></div>}
+          <div className="text-[10px] text-zinc-400 mt-1 whitespace-normal leading-4">{gterm===''?'尚未選擇時間的目標暫不參與 FIRE 試算，請選一個。':gterm==='date'?'有確切日期時使用。':'系統會換算成約 '+(TERMS.find(x=>x[0]===gterm)||[0,0,0])[2]+' 年後的估計日期（列表顯示「約」），之後可改成指定日期。'}短期 2 年內、中期 2–5 年、長期 5 年以上。目標的金額由「未來基金」依優先級、日期自動分配。</div></div>}
         {form.kind==='goal'&&<div><div className="text-xs text-zinc-500 mb-1">累積方式（資金放在哪裡）</div>
           <div className="flex gap-2"><Pill full on={gplace==='cash'} color="#52525b" tc="#fff" onClick={()=>setGplace('cash')}>現金</Pill><Pill full on={gplace==='invest'} color="#7c3aed" tc="#fff" onClick={()=>setGplace('invest')}>投資</Pill></div>
           <div className="text-[10px] text-zinc-400 mt-1 whitespace-normal leading-4">現金按存款利率、投資按保守情境報酬估算；只是標記，不會動你的帳戶或持股。</div></div>}
-        <SaveBtn disabled={!name.trim()||!(budget>0)} onClick={saveForm}>{form.id?'儲存':'新增'}</SaveBtn>
+        {form.kind==='goal'&&form.id?<div className="flex gap-2"><div className="flex-1"><SaveBtn disabled={!name.trim()||!(budget>0)} onClick={saveForm}>儲存</SaveBtn></div><button type="button" onClick={()=>{ const g=d.goals.find(x=>x.id===form.id); if(g&&confirm('刪除「'+g.name+'」？')){ setD(p=>({...p,goals:p.goals.filter(x=>x.id!==g.id)})); setForm(null);} }} className="h-11 px-5 rounded-lg border border-neutral-200 text-sm font-medium text-red-600">刪除</button></div>
+          :<SaveBtn disabled={!name.trim()||!(budget>0)} onClick={saveForm}>{form.id?'儲存':'新增'}</SaveBtn>}
       </div>
     </Sheet>}
   </div>);
@@ -1251,8 +1266,8 @@ function SwipeRow({open,onOpen,onClose,onEdit,children}) {
   };
   const eb="absolute top-0 bottom-0 w-[72px] bg-blue-600 text-white text-xs font-medium";
   return (<div className="relative overflow-hidden border-b-[0.5px] border-neutral-300" style={{touchAction:'pan-y'}}>
-    <button onClick={onEdit} className={eb+' left-0'}>編輯</button>
-    <button onClick={onEdit} className={eb+' right-0'}>編輯</button>
+    <button onClick={onEdit} aria-label="編輯" className={eb+' left-0 flex items-center justify-center'}><Ic n="pen-line" s={18}/></button>
+    <button onClick={onEdit} aria-label="編輯" className={eb+' right-0 flex items-center justify-center'}><Ic n="pen-line" s={18}/></button>
     <div className="relative bg-white transition-transform duration-200 select-none" style={{transform:`translateX(${dx}px)`}} onPointerDown={down} onPointerUp={up} onPointerCancel={()=>{st.current=null;}}>{children}</div>
   </div>);
 }

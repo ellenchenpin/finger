@@ -731,16 +731,16 @@ function PageMy({d,setD,fund,c,mom}) {
       <div className="text-sm font-semibold mt-4">未來目標與 FIRE</div>
       {(()=>{ const gp=f.gp||{parts:[],exSaved:0}, pts=gp.parts; return <>
         <div className="text-[11px] text-zinc-500 whitespace-normal leading-4">{pts.length?`有預計使用時間的 ${pts.length} 個目標會參與試算：未來基金依優先級、日期分配，到期前資金依「現金／投資」複利成長，到期月份扣除預算；FIRE 達成時，尚未支付的目標預算也要能付得起。`:'目前沒有填預計使用時間的目標，未來基金全數暫時排除（到「未來目標」編輯項目填預計使用時間）。'}</div>
-        {gp.exSaved>0&&<Row l="暫時排除（未填日期、日期已過或超出目標預算）" v={gp.exSaved}/>}</>; })()}
+</>; })()}
       <div className="text-sm font-semibold mt-4">計入 FIRE 的資產</div>
       {FIRE_ASSETS.map(([k,l])=><label key={k} className="flex items-center justify-between gap-2 py-1.5 text-sm"><span className="flex items-center gap-2"><input type="checkbox" checked={!!cf.inc[k]} onChange={e=>setF({inc:{...cf.inc,[k]:e.target.checked}})}/>{l}</span><span className="text-zinc-600">{fmt(cv[k])}</span></label>)}
       <div className="border-t-[0.5px] border-neutral-300 my-3"/>
       <div className="text-sm font-semibold">排除項目</div>{!depOn&&<div className="text-[11px] text-zinc-400 leading-4">需先勾選「活存」或「定存」才能使用</div>}
       <Ex on={cf.exEF} onChange={v=>setF({exEF:v})} label="排除緊急預備金" right={<span className="text-zinc-600">{fmt(c.ef||0)}</span>}/>
-      <div className="flex items-center justify-between gap-2 py-1.5 text-sm"><span className="text-zinc-500">未來基金（資金另計，見上方）</span><span className="text-zinc-600">{fmt(fundSaved)}</span></div>
+      {fundSaved>0&&<div className="flex items-center justify-between gap-2 py-1.5 text-sm"><span className="text-zinc-500 min-w-0">未來基金中暫不參與試算（無日期／已到期／超出預算）</span><span className="text-zinc-600 shrink-0">{fmt(((f.gp||{}).exSaved)||0)}</span></div>}
       <Ex on={useShort} onChange={v=>setF({exShort:v})} label="排除短期用途資金" right={<NumBox value={cf.shortAmt||0} onChange={v=>setF({shortAmt:v})} className="w-32 h-9 px-3 text-sm"/>}/>
       <div className="flex justify-between text-sm font-semibold pt-2 border-t-[0.5px] border-neutral-200 mt-2"><span>計入 FIRE 的資產</span><span>{fmt(A.total)}</span></div>
-      <div className="text-[11px] text-zinc-400 whitespace-normal leading-4 mt-1">原選取 {fmt(A.gross)}{A.exEF>0?`，扣除緊急預備金 ${fmt(A.exEF)}`:''}{A.exFund>0?`，扣除未來基金 ${fmt(A.exFund)}`:''}{A.short>0?`，扣除短期用途資金 ${fmt(A.short)}`:''}。</div>
+      <div className="text-[11px] text-zinc-400 whitespace-normal leading-4 mt-1">原選取 {fmt(A.gross)}{A.exEF>0?`，扣除緊急預備金 ${fmt(A.exEF)}`:''}{A.exFund>0?`，未來基金 ${fmt(A.exFund)} 改由「未來目標」依到期日另計`:''}{A.short>0?`，扣除短期用途資金 ${fmt(A.short)}`:''}。</div>
     </Sheet>; })()}
   </div>);
 }

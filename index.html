@@ -550,7 +550,7 @@ function NumBox({value,onChange,className='w-32 h-9 px-3 text-sm',autoFocus,dec}
 const Num=({label,value,onChange,dec})=>(<label className="flex items-center justify-between gap-3 py-1.5 text-sm"><span className="flex-1 min-w-0 truncate">{label}</span><NumBox value={value} onChange={onChange} dec={dec}/></label>);
 const Txt=({value,onChange,ph,className=''})=><input value={value} placeholder={ph} onChange={e=>onChange(e.target.value)} className={`h-9 rounded-lg border border-neutral-200 px-3 text-sm bg-white min-w-0 ${className}`}/>;
 const Btn=({onClick,danger,gray,red,label,children})=><button onClick={onClick} aria-label={label} title={label} className={`px-3 h-8 rounded-lg border text-xs font-medium shrink-0 ${red?'bg-red-500 border-red-500 text-white':gray?'bg-neutral-200 border-neutral-200':'bg-white border-neutral-200'} ${danger&&!red?'text-red-600':''}`}>{children}</button>;
-const BI=({n,label,s=16,...p})=><Btn {...p} label={label}><Ic n={n} s={s}/></Btn>;   // 圖示按鈕（無文字，保留 aria-label）
+const BI=({n,label,s=16,onClick,danger})=><button onClick={onClick} aria-label={label} title={label} className={`px-1.5 h-8 shrink-0 inline-flex items-center justify-center ${danger?'text-red-600':'text-zinc-600'}`}><Ic n={n} s={s}/></button>;   // 圖示按鈕（無文字，保留 aria-label）
 const Row=({l,v})=><div className="flex items-center justify-between py-1.5 text-sm"><span>{l}</span><span className="text-zinc-600">{fmt(v)}</span></div>;
 function Sheet({title,icon,onClose,children}) {
   return (<div className="fixed inset-0 z-40 bg-black/30 flex items-end justify-center px-3" style={{paddingBottom:'calc(38px + env(safe-area-inset-bottom,0px))'}} onClick={onClose}>

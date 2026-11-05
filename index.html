@@ -589,7 +589,7 @@ function FireCard({d,c,onClick}) {
     return (<div className={first?'mt-3':'mt-4'}><div className="flex items-baseline justify-between gap-2"><span className="text-sm font-semibold">{name}<span className="font-normal text-zinc-400">{sub}</span></span><Fit className="text-xs text-zinc-500 max-w-[55%]">目標 {fmt(t.target)}</Fit></div>
       <Fit className="text-sm font-semibold mt-2">達成率 {t.pct.toFixed(2)}%｜{tx}</Fit><Bar pct={t.pct} color={color}/></div>); };
   const strip=(name,k)=><div className="text-xs text-zinc-600 mt-1 whitespace-normal leading-5">{name}：{SCEN.map(([key,l])=>`${l} ${fireWhen(f.sc[key][k],d).replace(/（.*）/,'')}`).join('｜')}</div>;
-  return (<Card className="p-4"><div className="flex items-baseline justify-between gap-2"><span className="text-sm font-semibold"><TT n="flame">FIRE 倒數計時</TT></span><span className="flex items-center gap-1.5"><span className="text-xs text-zinc-500">{sn}情境</span><button type="button" aria-label="FIRE 假設說明" onClick={e=>{e.stopPropagation();setInfo(v=>!v);}} className={`w-5 h-5 rounded-full border text-[11px] leading-none ${info?'bg-black text-white border-black':'border-neutral-300 text-zinc-500'}`}>i</button><button type="button" aria-label="FIRE 設定" onClick={e=>{e.stopPropagation();onClick&&onClick();}} className="text-zinc-500 self-center"><Ic n="settings" s={18}/></button></span></div>
+  return (<Card className="p-4"><div className="flex items-baseline justify-between gap-2"><span className="flex items-center gap-1.5"><span className="text-sm font-semibold"><TT n="flame">FIRE 倒數計時</TT></span><button type="button" aria-label="FIRE 假設說明" onClick={e=>{e.stopPropagation();setInfo(v=>!v);}} className={`w-3.5 h-3.5 rounded-full border text-[8px] shrink-0 leading-none ${info?'bg-black text-white border-black':'border-neutral-300 text-zinc-500'}`}>i</button></span><span className="flex items-center gap-1.5"><span className="text-xs text-zinc-500">{sn}情境</span><button type="button" aria-label="FIRE 設定" onClick={e=>{e.stopPropagation();onClick&&onClick();}} className="text-zinc-500 self-center"><Ic n="settings" s={18}/></button></span></div>
     {row('Lean FIRE ','(僅必要開銷)',f.lean,'bg-green-500',true)}{row('Real FIRE ','',f.real,'bg-blue-500')}
     <div className="mt-3 pt-2 border-t-[0.5px] border-neutral-200">{strip('Lean','lean')}{strip('Real','real')}</div>
     {info&&<div className="mt-2 p-2.5 rounded-lg bg-neutral-50" onClick={e=>e.stopPropagation()}><div className="text-[10px] text-zinc-500 whitespace-normal leading-4">假設：股票名目報酬 {f.ret}%（扣成本 {cf.cost}%、稅費 {cf.tax}%）、存款取帳戶利率 {f.depRate.toFixed(1)}%，再扣通膨 {cf.infl}%，整體實質報酬約 {f.br.toFixed(1)}%；目標 = 年支出 ÷ {cf.swr}%，以今日幣值計算；每月投入與獎金為固定名目金額，會依通膨折算。計入資產 {fmt(f.assets.total)}{f.assets.total!==c.total?`（總資產 ${fmt(c.total)}）`:''}。</div>
@@ -662,7 +662,7 @@ function RecSheet({d,setD,onClose}) {
     const y=new Date().getFullYear(); for(const yy of [y,y-1]){ for(let i=1;i<=12;i++){ const ym=ymOf(yy,i); if(!p.history.some(x=>x.ym===ym)) return put(p,mk(ym,calcAssets(p))); } } return p; });
   return (<Sheet title="資產紀錄" onClose={onClose}>
     <div className="text-xs text-zinc-500 leading-5 whitespace-normal mb-2">上個月沒有快照時，首頁會提醒補登（補登的月底資產歸入該月；「記錄本月」保留今天的實際日期）。已有的月份不會被覆寫，所有年度的紀錄都會保留；漏記的月份可「新增月份」補上並修改數字。</div>
-    <div className="flex gap-2 mb-2"><Btn onClick={now}>記錄本月</Btn><Btn onClick={add}>新增月份</Btn><Btn onClick={()=>setCal(true)}>校正餘額</Btn></div>
+    <div className="flex gap-2 mb-2"><button onClick={now} className="px-2 h-8 text-xs font-medium text-zinc-700 shrink-0">記錄本月</button><button onClick={add} className="px-2 h-8 text-xs font-medium text-zinc-700 shrink-0">新增月份</button><button onClick={()=>setCal(true)} className="px-2 h-8 text-xs font-medium text-zinc-700 shrink-0">校正餘額</button></div>
     {cal&&<SnapSheet mode="calib" d={d} setD={setD} onClose={()=>setCal(false)}/>}
     {!hs.length&&<div className="text-xs text-zinc-400 py-3">尚無紀錄</div>}
     {hs.map((r,i)=>(<div key={r.ym}>
@@ -714,7 +714,7 @@ function PageMy({d,setD,fund,c,mom}) {
     <FundCard d={d} fund={fund}/>
     <FireCard d={d} c={c} onClick={()=>setSheet('fire')}/>
     <Card className="relative overflow-hidden" style={{height:288}}>
-      <button onClick={()=>setRec(true)} aria-label="管理紀錄" className="absolute right-3 top-3 px-2.5 h-7 rounded-lg border border-neutral-200 bg-white flex items-center"><Ic n="columns-3-cog" s={16}/></button>
+      <button onClick={()=>setRec(true)} aria-label="管理紀錄" className="absolute right-3 top-3 px-1.5 h-7 text-zinc-600 flex items-center"><Ic n="columns-3-cog" s={16}/></button>
       <svg viewBox="0 0 361 288" width="100%" height="288" fontFamily="Inter" onClick={()=>setTip(null)}>
         <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2563eb" stopOpacity=".15"/><stop offset="1" stopColor="#2563eb" stopOpacity="0"/></linearGradient></defs>
         <svg x="16" y="14" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" dangerouslySetInnerHTML={{__html:LUCIDE['trending-up']}}/>
@@ -1022,7 +1022,7 @@ function PageDetail({d,setD,c}) {
         </div>);})}
     </Acc>
 
-    <Acc title={<TT n="chart-candlestick">股票持股</TT>} sub={`${d.holdings.length} 檔 · 總市值 ${fmt(mvAll)}`} open={sec.stock} onToggle={()=>tsec('stock')} right={<Btn onClick={e=>{e.stopPropagation();setStForm({kind:'new'});}} label="新增"><Ic n="message-circle-plus" s={16}/></Btn>}>
+    <Acc title={<TT n="chart-candlestick">股票持股</TT>} sub={`${d.holdings.length} 檔 · 總市值 ${fmt(mvAll)}`} open={sec.stock} onToggle={()=>tsec('stock')} right={<BI onClick={e=>{e.stopPropagation();setStForm({kind:'new'});}} label="新增" n="message-circle-plus" s={16}/>}>
       {!d.holdings.length&&<div className="text-xs text-zinc-400 py-3 whitespace-normal">尚無持股。按「新增持股」，或在每月記帳選「投資」類別買股，會自動建立。現價為手動輸入（無即時報價）。</div>}
       {hsorted.map((h,i)=>{const v=holdVals(h);return (
         <div key={h.id}>{(i===0||hsorted[i-1].cur!==h.cur)&&<div className="flex items-center gap-2 pt-2 text-xs font-semibold text-zinc-500"><span>{h.cur==='USD'?'美股':'台股'}</span>{h.cur==='USD'&&<span className="flex items-center gap-1 font-normal text-zinc-400">{fxEdit?<><span>匯率 $</span><NumBox autoFocus dec={3} value={d.fx||32} onChange={v=>setD(p=>({...p,fx:v}))} className="w-16 h-7 px-1 text-xs"/></>:<span>匯率 ${d.fx||32}</span>}<button type="button" aria-label="編輯匯率" onClick={()=>setFxEdit(v=>!v)} className="text-zinc-400"><Ic n={fxEdit?'circle-check':'square-pen'} s={14}/></button></span>}</div>}<div className={`${(i===hsorted.length-1||hsorted[i+1].cur!==h.cur)?'':'border-b-[0.5px] border-neutral-300'} ${open['h'+h.id]?'bg-neutral-100/60 rounded-lg px-2 my-1':''}`}>
@@ -1057,11 +1057,11 @@ function PageDetail({d,setD,c}) {
     </Acc>
 
     <Card className={`mx-4 mt-6 ${sec.alloc?'pb-4':''}`}>
-      <div className="px-4 h-14 flex items-center gap-2 cursor-pointer" onClick={()=>tsec('alloc')}><div className="flex-1 min-w-0"><div className="text-sm font-semibold leading-5"><TT n="sliders-horizontal">現金分配</TT></div>{!sec.alloc&&<div className="text-[11px] text-zinc-500 leading-4 truncate">開銷 {fmt(catSum(['必要開銷','選擇消費']))}・理財 {fmt(catSum(['投資理財','未來基金']))}</div>}</div><Btn onClick={e=>{e.stopPropagation();addCat();setSec(o=>({...o,alloc:true}));}} label="新增"><Ic n="message-circle-plus" s={16}/></Btn><Chev open={sec.alloc}/></div>
+      <div className="px-4 h-14 flex items-center gap-2 cursor-pointer" onClick={()=>tsec('alloc')}><div className="flex-1 min-w-0"><div className="text-sm font-semibold leading-5"><TT n="sliders-horizontal">現金分配</TT></div>{!sec.alloc&&<div className="text-[11px] text-zinc-500 leading-4 truncate">開銷 {fmt(catSum(['必要開銷','選擇消費']))}・理財 {fmt(catSum(['投資理財','未來基金']))}</div>}</div><BI onClick={e=>{e.stopPropagation();addCat();setSec(o=>({...o,alloc:true}));}} label="新增" n="message-circle-plus" s={16}/><Chev open={sec.alloc}/></div>
       {sec.alloc&&<>
       <div className="px-4">
         <div className="min-h-12 flex items-center gap-1 text-xs">
-          <div className="flex-1 min-w-0 text-center"><div className="text-[10px] text-zinc-400">固定分配</div><div className="flex items-center justify-center gap-1">{salEdit?<NumBox autoFocus value={salary} onChange={v=>setD(p=>({...p,salary:v}))} className="w-20 h-8 px-1 text-xs"/>:<Fit className="text-sm font-semibold">{fmt(salary)}</Fit>}<button onClick={()=>setSalEdit(e=>!e)} aria-label="編輯固定分配" className="shrink-0 text-zinc-400">{salEdit?'✓':'✎'}</button></div></div>
+          <div className="flex-1 min-w-0 text-center"><div className="text-[10px] text-zinc-400">固定分配</div><div className="flex items-center justify-center gap-1">{salEdit?<NumBox autoFocus value={salary} onChange={v=>setD(p=>({...p,salary:v}))} className="w-20 h-8 px-1 text-xs"/>:<Fit className="text-sm font-semibold">{fmt(salary)}</Fit>}<button onClick={()=>setSalEdit(e=>!e)} aria-label="編輯固定分配" className="shrink-0 text-zinc-400"><Ic n={salEdit?'circle-check':'pen-line'} s={14}/></button></div></div>
           <span className="shrink-0 text-zinc-400">−</span>
           <div className="flex-1 min-w-0 text-center"><div className="text-[10px] text-zinc-400">已分配</div><Fit className="text-sm font-semibold">{fmt(allocated)}</Fit></div>
           <span className="shrink-0 text-zinc-400">=</span>
@@ -1112,7 +1112,7 @@ function PageDetail({d,setD,c}) {
                 {(()=>{const left=100-Math.min(100,sumBy(b.inj||[],i=>i.ratio||0)); return left>0&&b.amt>0?<div className="text-[11px] text-amber-600 pl-2 mt-0.5">尚有 {left}% 未分配（{fmt(b.amt*left/100)}）</div>:null;})()}
               </>}
             </div>))}
-            {bEdit&&<div className="mt-2"><Btn onClick={()=>setD(p=>({...p,bonuses:[...p.bonuses,{id:uid(),name:'',amt:0,month:12,inj:[]}]}))} label="新增"><Ic n="message-circle-plus" s={16}/></Btn></div>}
+            {bEdit&&<div className="mt-2"><BI onClick={()=>setD(p=>({...p,bonuses:[...p.bonuses,{id:uid(),name:'',amt:0,month:12,inj:[]}]}))} label="新增" n="message-circle-plus" s={16}/></div>}
           </div>}
         </div>
       </div>
@@ -1222,14 +1222,11 @@ function PageGoals({d,setD,fund}) {
     <div className="mt-1">
       <div className={`${WR} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span>願望</span><span>預算</span><span className="text-center">達成</span></div>
       {wishes.map(w=>(
-        <SwipeLeft key={w.id} open={swp===w.id} onOpen={()=>setSwp(w.id)} onClose={()=>setSwp(null)}
-          actions={[{l:'編輯',icon:'pen-line',c:'bg-blue-600',fn:()=>openForm('wish',w)},{l:'刪除',c:'bg-red-600',fn:()=>delWish(w)}]}>
-          <div className={`${WR} h-10`}>
+        <div key={w.id} className={`${WR} h-10 cursor-pointer`} onClick={()=>openForm('wish',w)}>
             <Fit className={`text-xs font-medium min-w-0 ${w.done?'text-zinc-400 line-through':''}`}>{w.name}</Fit>
             <Fit className="text-[10px] font-medium text-zinc-500 min-w-0">{fmt(w.budget)}</Fit>
-            <button onClick={()=>toggleWish(w.id)} aria-label="達成" className={`w-5 h-5 rounded-lg mx-auto flex items-center justify-center text-white text-[11px] ${w.done?'bg-green-500':'bg-zinc-300'}`}>{w.done?'✓':''}</button>
-          </div>
-        </SwipeLeft>))}
+            <button onClick={e=>{e.stopPropagation();toggleWish(w.id);}} aria-label="達成" className={`w-5 h-5 rounded-lg mx-auto flex items-center justify-center text-white text-[11px] ${w.done?'bg-green-500':'bg-zinc-300'}`}>{w.done?'✓':''}</button>
+          </div>))}
     </div>
     <div style={{height:'calc(76px + env(safe-area-inset-bottom,0px))'}}/>
     {form&&<Sheet title={(form.id?'編輯':'新增')+(form.kind==='goal'?'未來基金項目':'願望')} onClose={()=>setForm(null)}>
@@ -1246,6 +1243,7 @@ function PageGoals({d,setD,fund}) {
           <div className="flex gap-2"><Pill full on={gplace==='cash'} color="#52525b" tc="#fff" onClick={()=>setGplace('cash')}>現金</Pill><Pill full on={gplace==='invest'} color="#7c3aed" tc="#fff" onClick={()=>setGplace('invest')}>投資</Pill></div>
           <div className="text-[10px] text-zinc-400 mt-1 whitespace-normal leading-4">現金按存款利率、投資按保守情境報酬估算；只是標記，不會動你的帳戶或持股。</div></div>}
         {form.kind==='goal'&&form.id?<div className="flex gap-2"><div className="flex-1"><SaveBtn disabled={!name.trim()||!(budget>0)} onClick={saveForm}>儲存</SaveBtn></div><button type="button" onClick={()=>{ const g=d.goals.find(x=>x.id===form.id); if(g&&confirm('刪除「'+g.name+'」？')){ setD(p=>({...p,goals:p.goals.filter(x=>x.id!==g.id)})); setForm(null);} }} className="h-11 px-5 rounded-lg border border-neutral-200 text-sm font-medium text-red-600">刪除</button></div>
+          :form.kind==='wish'&&form.id?<div className="flex gap-2"><div className="flex-1"><SaveBtn disabled={!name.trim()||!(budget>0)} onClick={saveForm}>儲存</SaveBtn></div><button type="button" onClick={()=>{ const w=d.wishlist.find(x=>x.id===form.id); if(w&&confirm('刪除「'+w.name+'」？')){ setD(p=>({...p,wishlist:p.wishlist.filter(x=>x.id!==w.id)})); setForm(null);} }} className="h-11 px-5 rounded-lg border border-neutral-200 text-sm font-medium text-red-600">刪除</button></div>
           :<SaveBtn disabled={!name.trim()||!(budget>0)} onClick={saveForm}>{form.id?'儲存':'新增'}</SaveBtn>}
       </div>
     </Sheet>}

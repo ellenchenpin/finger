@@ -549,7 +549,7 @@ function NumBox({value,onChange,className='w-32 h-9 px-3 text-sm',autoFocus,dec}
   const [s,setS]=useState(String(value));
   useEffect(()=>{ if(Number(s||0)!==value) setS(String(value)); },[value]);
   if(calc) return <input readOnly inputMode="none" value={addCommas(String(value))} onClick={()=>OPEN_CALC({value,onChange})} className={`rounded-lg border border-neutral-200 text-right bg-white min-w-0 cursor-pointer ${className}`}/>;
-  return <input value={addCommas(s)} inputMode="decimal" autoFocus={autoFocus} onChange={e=>{let v=e.target.value.replace(/[^\d.]/g,'').replace(/^0+(?=\d)/,''); if(dec!=null&&v.includes('.')){const [ip,fp]=v.split('.');v=ip+'.'+fp.slice(0,dec);} setS(v);onChange(Number(v)||0);}} className={`rounded-lg border border-neutral-200 text-right bg-white min-w-0 ${className}`}/>;
+  return <input value={s===''||s==='0'?'':addCommas(s)} placeholder="0" inputMode="decimal" autoFocus={autoFocus} onChange={e=>{let v=e.target.value.replace(/[^\d.]/g,'').replace(/^0+(?=\d)/,''); if(dec!=null&&v.includes('.')){const [ip,fp]=v.split('.');v=ip+'.'+fp.slice(0,dec);} setS(v);onChange(Number(v)||0);}} className={`rounded-lg border border-neutral-200 text-right bg-white min-w-0 placeholder:text-zinc-900 focus:placeholder:text-transparent ${className}`}/>;   // 數字是 0 時輸入格是空的：沒點進去顯示 0（placeholder），點進去 0 消失，直接輸入
 }
 const Num=({label,value,onChange,dec})=>(<label className="flex items-center justify-between gap-3 py-1.5 text-sm"><span className="flex-1 min-w-0 truncate">{label}</span><NumBox value={value} onChange={onChange} dec={dec}/></label>);
 const Txt=({value,onChange,ph,className=''})=><input value={value} placeholder={ph} onChange={e=>onChange(e.target.value)} className={`h-9 rounded-lg border border-neutral-200 px-3 text-sm bg-white min-w-0 ${className}`}/>;
@@ -576,7 +576,7 @@ function CalcPad({cfg,onClose}) {
   const hasOp=/[+\-−×÷]/.test(ex.slice(1)), pv=hasOp?ev(ex):null;
   return (<div className="fixed inset-0 z-[60] bg-black/30 flex items-end justify-center px-3" style={{paddingBottom:'calc(38px + env(safe-area-inset-bottom,0px))'}} onClick={onClose}>
     <div className="bg-white w-full max-w-[393px] rounded-2xl p-4" onClick={e=>e.stopPropagation()}>
-      <div className="text-right text-2xl font-semibold h-9 overflow-hidden">{ex?ex.replace(/\d+(\.\d+)?/g,m=>addCommas(m)):'0'}</div>
+      <div className="text-right text-2xl font-semibold h-9 overflow-hidden">{ex?ex.replace(/\d+(\.\d+)?/g,m=>addCommas(m)):''}</div>
       <div className="text-right text-xs text-zinc-400 h-5">{pv!=null?'= '+addCommas(String(pv)):''}</div>
       <div className="grid grid-cols-4 gap-2 mt-2">
         {keys.map(k=><button key={k} onClick={()=>press(k)} className={`h-12 rounded-lg text-lg font-medium ${/[÷×−+=]/.test(k)?'bg-neutral-200':'bg-neutral-100'}`}>{k}</button>)}

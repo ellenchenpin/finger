@@ -96,7 +96,8 @@ function holdVals(h){   // 依交易紀錄（日期、輸入先後）逐筆重�
       const avg=sh>0?cost/sh:0, net=t.shares*t.price-(t.fee||0)-(t.tax||0);
       realized+=(t.shares>0?net*q/t.shares:0)-avg*q;                               // 已實現損益 = 淨收入 − 平均成本 × 賣出股數
       cost-=avg*q; sh-=q; if(sh<1e-9){sh=0;cost=0;}
-    } else div+=t.amt;
+    } else if(t.type==='adj'){ sh=t.shares; cost=t.shares*t.price; }          // 校正：直接把股數與平均成本對齊證券 app（不影響已實現損益與股息）
+    else div+=t.amt;
   });
   const avg=sh>0?cost/sh:0, mv=sh*h.price, pl=mv-cost;                             // 未實現損益 = 市值 − 剩餘成本
   return {sh,avg,cost,mv,pl,plPct:cost>0?pl/cost*100:0,realized,div,oversold};
@@ -311,7 +312,7 @@ const PTYPES=[['stock','一般股票'],['etf','股票型 ETF']];                
 const taxRate=(cur,ptype)=>cur==='TWD'?(ptype==='etf'?0.001:0.003):0;                // 台股賣出交易稅：一般股票 0.3%、股票型 ETF 0.1%
 const autoTax=(cur,gross,ptype)=>Math.round(gross*taxRate(cur,ptype));               // 只用於「新交易的預設值」；已儲存的交易稅不會被重算
 // 單一入口：持股、銀行餘額一次更新；失敗回傳 {err}，不改動任何資料
-// sp: {kind:'buy'|'sell'|'div', hid|ticker+cur, date, shares, price, fee, tax, amt(股息實領), acct, noBank, price0}
+// sp: {kind:'buy'|'sell'|'div'|'adj'(校正), hid|ticker+cur, date, shares, price, fee, tax, amt(股息實領), acct, noBank, price0}
 function applyTrade(p,sp){
   const fx=p.fx||32, key=String(sp.ticker||'').trim().toUpperCase();
   let h=null;   // 持股識別：優先用 hid；沒有就要「代碼＋幣別」都相符，不同幣別（市場）同代碼不會混在一起
@@ -322,7 +323,10 @@ function applyTrade(p,sp){
   if(!h&&!key) return {err:'請輸入股票代碼'};
   if(!sp.date) return {err:'請選擇日期'};
   let cashT=0, trade;   // cashT：對銀行活存的影響（台幣；買進為負、賣出與股息為正）
-  if(sp.kind==='div'){
+  if(sp.kind==='adj'){
+    if(!(sp.shares>=0)||!(sp.shares===0||sp.price>0)) return {err:'請輸入股數與平均成本'};
+    trade={id:uid(),type:'adj',date:sp.date,shares:sp.shares,price:sp.price||0};
+  } else if(sp.kind==='div'){
     if(!(sp.amt>0)) return {err:'請輸入股息金額'};
     cashT=r2(toT(sp.amt)); trade={id:uid(),type:'div',date:sp.date,amt:sp.amt};
   } else {
@@ -520,7 +524,7 @@ function planRemote(ctx,raw,cur,busy){   // 收到雲端快照：忽略（已知
 
 /* ============ 共用元件 ============ */
 /* Lucide 線條圖示（內嵌 SVG，離線可用；來源 lucide-icons/lucide，ISC 授權）：顏色沿用文字色，不加底框 */
-const LUCIDE={"wallet": "<path d=\"M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1\"/> <path d=\"M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4\"/>", "chart-no-axes-combined": "<path d=\"M12 16v5\"/> <path d=\"M16 14.639V21\"/> <path d=\"M20 10.656V21\"/> <path d=\"m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15\"/> <path d=\"M4 18.463V21\"/> <path d=\"M8 14.656V21\"/>", "target": "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <circle cx=\"12\" cy=\"12\" r=\"6\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/>", "notebook-pen": "<path d=\"M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4\"/> <path d=\"M2 6h4\"/> <path d=\"M2 10h4\"/> <path d=\"M2 14h4\"/> <path d=\"M2 18h4\"/> <path d=\"M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z\"/>", "banknote": "<rect width=\"20\" height=\"12\" x=\"2\" y=\"6\" rx=\"2\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/> <path d=\"M6 12h.01M18 12h.01\"/>", "landmark": "<path d=\"M10 18v-7\"/> <path d=\"M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z\"/> <path d=\"M14 18v-7\"/> <path d=\"M18 18v-7\"/> <path d=\"M3 22h18\"/> <path d=\"M6 18v-7\"/>", "trending-up": "<path d=\"M16 7h6v6\"/> <path d=\"m22 7-8.5 8.5-5-5L2 17\"/>", "chart-pie": "<path d=\"M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z\"/> <path d=\"M21.21 15.89A10 10 0 1 1 8 2.83\"/>", "piggy-bank": "<path d=\"M11 17h3v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a3.16 3.16 0 0 0 2-2h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-1a5 5 0 0 0-2-4V3a4 4 0 0 0-3.2 1.6l-.3.4H11a6 6 0 0 0-6 6v1a5 5 0 0 0 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z\"/> <path d=\"M16 10h.01\"/> <path d=\"M2 8v1a2 2 0 0 0 2 2h1\"/>", "calendar-sync": "<path d=\"M11 10v4h4\"/> <path d=\"m11 14 1.535-1.605a5 5 0 018 1.5\"/> <path d=\"M16 2v3\"/> <path d=\"m21 18-1.535 1.605a5 5 0 01-8-1.5\"/> <path d=\"M21 22v-4h-4\"/> <path d=\"M21 8.517V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h3.517\"/> <path d=\"M3 9h4\"/> <path d=\"M8 2v3\"/>", "flame": "<path d=\"M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4\"/>", "camera": "<path d=\"M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z\"/> <circle cx=\"12\" cy=\"13\" r=\"3\"/>", "sliders-horizontal": "<path d=\"M10 5H3\"/> <path d=\"M12 19H3\"/> <path d=\"M14 3v4\"/> <path d=\"M16 17v4\"/> <path d=\"M21 12h-9\"/> <path d=\"M21 19h-5\"/> <path d=\"M21 5h-7\"/> <path d=\"M8 10v4\"/> <path d=\"M8 12H3\"/>", "chart-candlestick": "<path d=\"M9 5v4\"/> <rect width=\"4\" height=\"6\" x=\"7\" y=\"9\" rx=\"1\"/> <path d=\"M9 15v2\"/> <path d=\"M17 3v2\"/> <rect width=\"4\" height=\"8\" x=\"15\" y=\"5\" rx=\"1\"/> <path d=\"M17 13v3\"/> <path d=\"M3 3v16a2 2 0 0 0 2 2h16\"/>", "heart-pulse": "<path d=\"M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5\"/> <path d=\"M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27\"/>", "gift": "<path d=\"M12 7v14\"/> <path d=\"M20 11v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8\"/> <path d=\"M7.5 7a1 1 0 0 1 0-5A4.8 8 0 0 1 12 7a4.8 8 0 0 1 4.5-5 1 1 0 0 1 0 5\"/> <rect x=\"3\" y=\"7\" width=\"18\" height=\"4\" rx=\"1\"/>", "calendar-clock": "<path d=\"M16 14v2.2l1.6 1\"/> <path d=\"M16 2v3\"/> <path d=\"M21 7.338V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h2.338\"/> <path d=\"M3 9h5.859\"/> <path d=\"M8 2v3\"/> <circle cx=\"16\" cy=\"16\" r=\"6\"/>", "list-tree": "<path d=\"M8 5h13\"/> <path d=\"M13 12h8\"/> <path d=\"M13 19h8\"/> <path d=\"M3 10a2 2 0 0 0 2 2h3\"/> <path d=\"M3 5v12a2 2 0 0 0 2 2h3\"/>", "circle-check": "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <path d=\"m16 9-5.5 5.5L8 12\"/>", "pen-line": "<path d=\"M13 21h8\"/> <path d=\"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z\"/>", "message-circle-plus": "<path d=\"M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719\"/> <path d=\"M8 12h8\"/> <path d=\"M12 8v8\"/>", "rotate-ccw": "<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/> <path d=\"M3 3v5h5\"/>", "columns-3-cog": "<path d=\"M10.6 21H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v5.6\"/> <path d=\"m14.305 19.53.923-.382\"/> <path d=\"M15 3v7.6\"/> <path d=\"m15.229 16.852-.924-.383\"/> <path d=\"m16.852 15.228-.383-.923\"/> <path d=\"m16.852 20.772-.383.924\"/> <path d=\"m19.148 15.228.383-.923\"/> <path d=\"m19.53 21.696-.382-.924\"/> <path d=\"m20.773 16.852.922-.383\"/> <path d=\"m20.773 19.148.922.383\"/> <path d=\"M9 3v18\"/> <circle cx=\"18\" cy=\"18\" r=\"3\"/>", "circle-x": "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <path d=\"m15 9-6 6\"/> <path d=\"m9 9 6 6\"/>", "settings": "<path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"/> <circle cx=\"12\" cy=\"12\" r=\"3\"/>", "fingerprint-pattern": "<path d=\"M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4\"/> <path d=\"M14 13.12c0 2.38 0 6.38-1 8.88\"/> <path d=\"M17.29 21.02c.12-.6.43-2.3.5-3.02\"/> <path d=\"M2 12a10 10 0 0 1 18-6\"/> <path d=\"M2 16h.01\"/> <path d=\"M21.8 16c.2-2 .131-5.354 0-6\"/> <path d=\"M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2\"/> <path d=\"M8.65 22c.21-.66.45-1.32.57-2\"/> <path d=\"M9 6.8a6 6 0 0 1 9 5.2v2\"/>", "square-pen": "<path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/> <path d=\"M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z\"/>"};
+const LUCIDE={"wallet": "<path d=\"M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1\"/> <path d=\"M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4\"/>", "chart-no-axes-combined": "<path d=\"M12 16v5\"/> <path d=\"M16 14.639V21\"/> <path d=\"M20 10.656V21\"/> <path d=\"m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15\"/> <path d=\"M4 18.463V21\"/> <path d=\"M8 14.656V21\"/>", "target": "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <circle cx=\"12\" cy=\"12\" r=\"6\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/>", "notebook-pen": "<path d=\"M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4\"/> <path d=\"M2 6h4\"/> <path d=\"M2 10h4\"/> <path d=\"M2 14h4\"/> <path d=\"M2 18h4\"/> <path d=\"M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z\"/>", "banknote": "<rect width=\"20\" height=\"12\" x=\"2\" y=\"6\" rx=\"2\"/> <circle cx=\"12\" cy=\"12\" r=\"2\"/> <path d=\"M6 12h.01M18 12h.01\"/>", "landmark": "<path d=\"M10 18v-7\"/> <path d=\"M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z\"/> <path d=\"M14 18v-7\"/> <path d=\"M18 18v-7\"/> <path d=\"M3 22h18\"/> <path d=\"M6 18v-7\"/>", "trending-up": "<path d=\"M16 7h6v6\"/> <path d=\"m22 7-8.5 8.5-5-5L2 17\"/>", "chart-pie": "<path d=\"M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z\"/> <path d=\"M21.21 15.89A10 10 0 1 1 8 2.83\"/>", "piggy-bank": "<path d=\"M11 17h3v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a3.16 3.16 0 0 0 2-2h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-1a5 5 0 0 0-2-4V3a4 4 0 0 0-3.2 1.6l-.3.4H11a6 6 0 0 0-6 6v1a5 5 0 0 0 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z\"/> <path d=\"M16 10h.01\"/> <path d=\"M2 8v1a2 2 0 0 0 2 2h1\"/>", "calendar-sync": "<path d=\"M11 10v4h4\"/> <path d=\"m11 14 1.535-1.605a5 5 0 018 1.5\"/> <path d=\"M16 2v3\"/> <path d=\"m21 18-1.535 1.605a5 5 0 01-8-1.5\"/> <path d=\"M21 22v-4h-4\"/> <path d=\"M21 8.517V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h3.517\"/> <path d=\"M3 9h4\"/> <path d=\"M8 2v3\"/>", "flame": "<path d=\"M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4\"/>", "camera": "<path d=\"M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z\"/> <circle cx=\"12\" cy=\"13\" r=\"3\"/>", "sliders-horizontal": "<path d=\"M10 5H3\"/> <path d=\"M12 19H3\"/> <path d=\"M14 3v4\"/> <path d=\"M16 17v4\"/> <path d=\"M21 12h-9\"/> <path d=\"M21 19h-5\"/> <path d=\"M21 5h-7\"/> <path d=\"M8 10v4\"/> <path d=\"M8 12H3\"/>", "chart-candlestick": "<path d=\"M9 5v4\"/> <rect width=\"4\" height=\"6\" x=\"7\" y=\"9\" rx=\"1\"/> <path d=\"M9 15v2\"/> <path d=\"M17 3v2\"/> <rect width=\"4\" height=\"8\" x=\"15\" y=\"5\" rx=\"1\"/> <path d=\"M17 13v3\"/> <path d=\"M3 3v16a2 2 0 0 0 2 2h16\"/>", "heart-pulse": "<path d=\"M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5\"/> <path d=\"M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27\"/>", "gift": "<path d=\"M12 7v14\"/> <path d=\"M20 11v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8\"/> <path d=\"M7.5 7a1 1 0 0 1 0-5A4.8 8 0 0 1 12 7a4.8 8 0 0 1 4.5-5 1 1 0 0 1 0 5\"/> <rect x=\"3\" y=\"7\" width=\"18\" height=\"4\" rx=\"1\"/>", "calendar-clock": "<path d=\"M16 14v2.2l1.6 1\"/> <path d=\"M16 2v3\"/> <path d=\"M21 7.338V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h2.338\"/> <path d=\"M3 9h5.859\"/> <path d=\"M8 2v3\"/> <circle cx=\"16\" cy=\"16\" r=\"6\"/>", "list-tree": "<path d=\"M8 5h13\"/> <path d=\"M13 12h8\"/> <path d=\"M13 19h8\"/> <path d=\"M3 10a2 2 0 0 0 2 2h3\"/> <path d=\"M3 5v12a2 2 0 0 0 2 2h3\"/>", "circle-check": "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <path d=\"m16 9-5.5 5.5L8 12\"/>", "pen-line": "<path d=\"M13 21h8\"/> <path d=\"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z\"/>", "message-circle-plus": "<path d=\"M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719\"/> <path d=\"M8 12h8\"/> <path d=\"M12 8v8\"/>", "rotate-ccw": "<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/> <path d=\"M3 3v5h5\"/>", "columns-3-cog": "<path d=\"M10.6 21H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v5.6\"/> <path d=\"m14.305 19.53.923-.382\"/> <path d=\"M15 3v7.6\"/> <path d=\"m15.229 16.852-.924-.383\"/> <path d=\"m16.852 15.228-.383-.923\"/> <path d=\"m16.852 20.772-.383.924\"/> <path d=\"m19.148 15.228.383-.923\"/> <path d=\"m19.53 21.696-.382-.924\"/> <path d=\"m20.773 16.852.922-.383\"/> <path d=\"m20.773 19.148.922.383\"/> <path d=\"M9 3v18\"/> <circle cx=\"18\" cy=\"18\" r=\"3\"/>", "circle-x": "<circle cx=\"12\" cy=\"12\" r=\"10\"/> <path d=\"m15 9-6 6\"/> <path d=\"m9 9 6 6\"/>", "settings": "<path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"/> <circle cx=\"12\" cy=\"12\" r=\"3\"/>", "fingerprint-pattern": "<path d=\"M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4\"/> <path d=\"M14 13.12c0 2.38 0 6.38-1 8.88\"/> <path d=\"M17.29 21.02c.12-.6.43-2.3.5-3.02\"/> <path d=\"M2 12a10 10 0 0 1 18-6\"/> <path d=\"M2 16h.01\"/> <path d=\"M21.8 16c.2-2 .131-5.354 0-6\"/> <path d=\"M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2\"/> <path d=\"M8.65 22c.21-.66.45-1.32.57-2\"/> <path d=\"M9 6.8a6 6 0 0 1 9 5.2v2\"/>", "square-pen": "<path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/> <path d=\"M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z\"/>", "user": "<path d=\"M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2\" /> <circle cx=\"12\" cy=\"7\" r=\"4\" />", "arrow-left": "<path d=\"m12 19-7-7 7-7\" /> <path d=\"M19 12H5\" />", "arrow-right": "<path d=\"M5 12h14\" /> <path d=\"m12 5 7 7-7 7\" />", "party-popper": "<path d=\"M5.8 11.3 2 22l10.7-3.79\" /> <path d=\"M4 3h.01\" /> <path d=\"M22 8h.01\" /> <path d=\"M15 2h.01\" /> <path d=\"M22 20h.01\" /> <path d=\"m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10\" /> <path d=\"m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17\" /> <path d=\"m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7\" /> <path d=\"M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z\" />", "plus": "<path d=\"M5 12h14\" /> <path d=\"M12 5v14\" />", "trash": "<path d=\"M10 11v6\" /> <path d=\"M14 11v6\" /> <path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\" /> <path d=\"M3 6h18\" /> <path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\" />"};
 const Ic=({n,s=16,w=1.8})=><svg aria-hidden="true" width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 block" dangerouslySetInnerHTML={{__html:LUCIDE[n]}}/>;
 const TT=({n,s=16,children})=><span className="inline-flex items-center gap-2"><Ic n={n} s={s}/>{children}</span>;   // 圖示＋標題文字（間距 8px、垂直置中）
 const TAB_ICONS=['wallet','chart-no-axes-combined','target','notebook-pen'];
@@ -809,54 +813,57 @@ const Acc=({title,sub,right,open,onToggle,children})=>(
     {open&&<div className="px-4 pb-4">{children}</div>}
   </Card>);
 const fmtC=(n,cur)=>cur==='USD'?(HIDE?'••••':'US$'+Math.round(n*100/100).toLocaleString('en-US',{maximumFractionDigits:2})):fmt(n);
-function RecForm({h,accounts,onSave,onClose}) {   // 新增定期定額：金額、扣款日、扣款帳戶（必選）
-  const [total,setTotal]=useState(0), [day,setDay]=useState(5), [acct,setAcct]=useState('');
+function RecForm({h,onSave,onClose}) {   // 新增定期定額（提醒用）：每月金額、提醒日
+  const [total,setTotal]=useState(0), [day,setDay]=useState(5);
   const sel="h-10 w-full rounded-lg border border-neutral-200 px-3 text-sm bg-white";
   return (<Sheet title={`新增定期定額・${h.ticker}`} icon="calendar-sync" onClose={onClose}><div className="flex flex-col gap-3">
     <div><div className="text-xs text-zinc-500 mb-1">每月金額（{h.cur}）</div><NumBox value={total} onChange={setTotal} className="w-full h-10 px-3 text-sm text-left"/></div>
-    <div><div className="text-xs text-zinc-500 mb-1">每月扣款日</div><select value={day} onChange={e=>setDay(+e.target.value)} className={sel}>{Array.from({length:28},(_,i)=>i+1).map(n=><option key={n} value={n}>{n} 號</option>)}</select></div>
-    <div><div className="text-xs text-zinc-500 mb-1">扣款帳戶（必選）</div><select value={acct} onChange={e=>setAcct(e.target.value)} className={sel}><option value="">請選擇</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-    <div className="text-[10px] text-zinc-400 whitespace-normal leading-4">到扣款日開啟 app 時會提醒是否自動記載買進並從帳戶扣款。設定後不能就地修改，要改請刪除後重新新增。</div>
-    <SaveBtn disabled={!(total>0)||!acct} onClick={()=>{onSave({total,day,acct});onClose();}}/>
+    <div><div className="text-xs text-zinc-500 mb-1">每月扣款日（當天或之後開啟 app 會提醒）</div><select value={day} onChange={e=>setDay(+e.target.value)} className={sel}>{Array.from({length:28},(_,i)=>i+1).map(n=><option key={n} value={n}>{n} 號</option>)}</select></div>
+    <div className="text-[10px] text-zinc-400 whitespace-normal leading-4">到扣款日後，主頁會出現提醒，請輸入這個月實際買到的股數（看證券 app）。不會動銀行餘額。設定後不能就地修改，要改請刪除後重新新增。</div>
+    <SaveBtn disabled={!(total>0)} onClick={()=>{onSave({total,day,acct:''});onClose();}}/>
   </div></Sheet>);
 }
-function StockForm({kind,d,hid,onSubmit,onClose}) {
-  const isNew=kind==='new', h=hid?d.holdings.find(x=>x.id===hid):null;
-  const [ticker,setTicker]=useState(''), [cur0,setCur]=useState('TWD'), [shares,setShares]=useState(0), [price,setPrice]=useState(0), [cost,setCost]=useState(0), [amt,setAmt]=useState(0), [date,setDate]=useState(todayISO()), [type,setType]=useState(isNew?'buy':kind), [acct,setAcct]=useState(''), [link,setLink]=useState(false), [fee,setFee]=useState(null), [tax,setTax]=useState(null), [pt,setPt]=useState('stock');
-  const cur=h?h.cur:cur0, gross=shares*price, ptype=h?(h.ptype||'stock'):pt;
-  const feeV=fee==null?autoFee(cur,gross):fee, taxV=tax==null?autoTax(cur,gross,ptype):tax;
-  const dt=dateOrToday(date);   // 日期為必填：清空 → 使用今天
-  const spec=isNew?{kind:'buy',ticker:ticker.trim().toUpperCase(),cur,ptype:pt,date:dt,shares,price:cost,fee:0,acct,noBank:!acct,price0:price||cost}
-    :{kind:type,hid,date:dt,shares,price,fee:type==='div'?undefined:feeV,tax:type==='sell'?taxV:undefined,amt,acct,noBank:!link};   // 預設不動銀行；勾選連動才扣款／入帳
-  const ready=(isNew?(ticker.trim()&&shares>0&&cost>0):type==='div'?amt>0:(shares>0&&price>0))&&(isNew||!link||!!acct);
+function StockForm({kind,d,hid,onSubmit,onClose}) {   // 簡易模式：平常只填股數與價格；日期／手續費／稅／銀行連動收在「進階」，預設手續費與稅為 0（不假裝比證券 app 更精準）
+  const isNew=kind==='new', h=hid?d.holdings.find(x=>x.id===hid):null, hv=h?holdVals(h):null;
+  const [ticker,setTicker]=useState(''), [cur0,setCur]=useState('TWD'), [shares,setShares]=useState(0), [price,setPrice]=useState(0), [cost,setCost]=useState(0), [amt,setAmt]=useState(0), [date,setDate]=useState(todayISO()), [type,setType]=useState(isNew?'buy':kind), [acct,setAcct]=useState(''), [link,setLink]=useState(false), [fee,setFee]=useState(0), [tax,setTax]=useState(0), [adv,setAdv]=useState(false);
+  const [aSh,setASh]=useState(hv?Math.round(hv.sh*1000)/1000:0), [aAvg,setAAvg]=useState(hv?Math.round(hv.avg*10000)/10000:0);
+  const cur=h?h.cur:cur0;
+  const dt=dateOrToday(adv?date:todayISO());   // 日期收在進階；沒展開就用今天
+  const spec=isNew?{kind:'buy',ticker:ticker.trim().toUpperCase(),cur,ptype:'stock',date:todayISO(),shares,price:cost,fee:0,noBank:true,price0:price||cost}
+    :type==='adj'?{kind:'adj',hid,date:todayISO(),shares:aSh,price:aAvg,noBank:true}
+    :{kind:type,hid,date:dt,shares,price,fee:type==='div'?undefined:fee,tax:type==='sell'?tax:undefined,amt,acct,noBank:!(adv&&link)};   // 預設不動銀行；進階裡勾選連動才扣款／入帳
+  const ready=isNew?(ticker.trim()&&shares>0&&cost>0):type==='adj'?(aSh>=0&&(aSh===0||aAvg>0)):(type==='div'?amt>0:(shares>0&&price>0))&&(!(adv&&link)||!!acct);
   const r=ready?applyTrade(d,spec):{}, err=r.err||'';
   const L=(t,ch)=><div><div className="text-xs text-zinc-500 mb-1">{t}</div>{ch}</div>;
   const nb="w-full h-10 px-3 text-sm text-left", sel="h-10 w-full rounded-lg border border-neutral-200 px-3 text-sm bg-white";
-  const acctSel=isNew?L('扣款帳戶（選填；不選＝既有持股建檔，不動銀行）',<select value={acct} onChange={e=>setAcct(e.target.value)} className={sel}><option value="">不扣款</option>{d.accounts.map(a=><option key={a.id} value={a.id}>{a.name}（活存 {money(a.demand)}）</option>)}</select>)
-    :L('同步更新銀行餘額',<div className="flex flex-col gap-2"><div className="flex gap-2"><Pill on={!link} onClick={()=>setLink(false)}>不動銀行（預設）</Pill><Pill on={link} onClick={()=>setLink(true)}>{type==='buy'?'從帳戶扣款':'入帳到帳戶'}</Pill></div>
-      {link?<select value={acct} onChange={e=>setAcct(e.target.value)} className={sel}><option value="">請選擇帳戶</option>{d.accounts.map(a=><option key={a.id} value={a.id}>{a.name}（活存 {money(a.demand)}）</option>)}</select>
-        :<div className="text-[10px] text-zinc-400 whitespace-normal leading-4">銀行餘額不會自動更新，記得之後到銀行帳戶調整。</div>}</div>);
-  return (<Sheet title={isNew?'新增持股':'新增交易'} onClose={onClose}><div className="flex flex-col gap-3">
+  const bankSel=L('同步更新銀行餘額',<div className="flex flex-col gap-2"><div className="flex gap-2"><Pill on={!link} onClick={()=>setLink(false)}>不動銀行（預設）</Pill><Pill on={link} onClick={()=>setLink(true)}>{type==='buy'?'從帳戶扣款':'入帳到帳戶'}</Pill></div>
+    {link&&<select value={acct} onChange={e=>setAcct(e.target.value)} className={sel}><option value="">請選擇帳戶</option>{d.accounts.map(a=><option key={a.id} value={a.id}>{a.name}（活存 {money(a.demand)}）</option>)}</select>}</div>);
+  return (<Sheet title={isNew?'新增持股':'更新持股'} onClose={onClose}><div className="flex flex-col gap-3">
     {isNew?<>
       {L('股票代碼 / 名稱',<Txt value={ticker} onChange={setTicker} ph="例如 0050、AAPL" className="h-10 w-full"/>)}
       {L('幣別',<select value={cur0} onChange={e=>setCur(e.target.value)} className={sel}><option>TWD</option><option>USD</option></select>)}
-      {cur0==='TWD'&&L('商品類型（決定賣出交易稅預設值）',<select value={pt} onChange={e=>setPt(e.target.value)} className={sel}>{PTYPES.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>)}
       {L('持有股數',<NumBox value={shares} onChange={setShares} className={nb}/>)}
       {L('平均買入成本',<NumBox value={cost} onChange={setCost} className={nb}/>)}
-      {L('現價',<NumBox value={price} onChange={setPrice} className={nb}/>)}
-      {acctSel}
+      {L('現價（可留空，之後再更新）',<NumBox value={price} onChange={setPrice} className={nb}/>)}
     </>:<>
-      <div className="flex gap-2">{[['buy','買進'],['sell','賣出'],['div','股息']].map(([k,l])=><Pill key={k} on={type===k} onClick={()=>{setType(k);setFee(null);setTax(null);}}>{l}</Pill>)}</div>
-      {L('日期',<><DateBox required value={date} onChange={setDate}/><div className="text-[10px] text-zinc-400 mt-1">日期為必填；清空後儲存時會使用今天</div></>)}
-      {type==='div'?L(`股息實領金額（${cur}，已扣稅與補充保費）`,<NumBox value={amt} onChange={setAmt} className={nb}/>):<>
-        {L(`持有 ${h?Math.round(holdVals(h).sh*1000)/1000:0} 股・股數`,<NumBox value={shares} onChange={setShares} className={nb}/>)}
+      <div className="flex gap-2">{[['buy','加碼'],['sell','減碼'],['div','股息'],['adj','校正']].map(([k,l])=><Pill key={k} on={type===k} onClick={()=>{setType(k);setFee(0);setTax(0);}}>{l}</Pill>)}</div>
+      {type==='adj'?<>
+        <div className="text-[11px] text-zinc-500 whitespace-normal leading-5">和證券 app 對不上時，直接改成它顯示的股數與平均成本。已實現損益與股息不受影響。</div>
+        {L('股數',<NumBox value={aSh} onChange={setASh} className={nb}/>)}
+        {L(`平均成本（${cur}）`,<NumBox value={aAvg} onChange={setAAvg} className={nb} dec={4}/>)}</>
+      :type==='div'?L(`股息實領金額（${cur}，已扣稅與補充保費）`,<NumBox value={amt} onChange={setAmt} className={nb}/>):<>
+        {L(`目前持有 ${Math.round(hv.sh*1000)/1000} 股・${type==='buy'?'這次買進股數':'這次賣出股數'}`,<NumBox value={shares} onChange={setShares} className={nb}/>)}
         {L(`成交價（${cur}）`,<NumBox value={price} onChange={setPrice} className={nb}/>)}
-        {L('手續費（預設台股 0.1425%，可修改）',<NumBox value={feeV} onChange={setFee} className={nb}/>)}
-        {type==='sell'&&L(cur==='TWD'?`交易稅（${(PTYPES.find(x=>x[0]===ptype)||PTYPES[0])[1]}預設 ${taxRate(cur,ptype)*100}%，可手動修改）`:'交易稅（美股不收，可手動修改）',<NumBox value={taxV} onChange={setTax} className={nb}/>)}</>}
-      {acctSel}
+        {type==='sell'&&<div className="text-[10px] text-zinc-400 whitespace-normal leading-4">已實現損益以目前平均成本估算，不含手續費與稅，可能和證券 app 略有差異。</div>}</>}
+      {type!=='adj'&&<button type="button" onClick={()=>setAdv(v=>!v)} className="text-xs text-zinc-500 text-left">{adv?'收起進階':'進階：日期、手續費、稅、銀行'}</button>}
+      {type!=='adj'&&adv&&<>
+        {L('日期',<DateBox required value={date} onChange={setDate}/>)}
+        {type!=='div'&&L('手續費（預設 0）',<NumBox value={fee} onChange={setFee} className={nb}/>)}
+        {type==='sell'&&L('交易稅（預設 0）',<NumBox value={tax} onChange={setTax} className={nb}/>)}
+        {bankSel}</>}
     </>}
     {err?<div className="text-xs text-red-600 whitespace-normal">{err}</div>
-      :(ready&&r.trade&&<div className="text-xs text-zinc-500 whitespace-normal">{r.trade.cashT?`${r.trade.cashT<0?'將扣款':'將入帳'} ${money(Math.abs(r.trade.cashT))}（台幣）`:'不動用銀行帳戶'}</div>)}
+      :(ready&&r.trade&&r.trade.cashT?<div className="text-xs text-zinc-500 whitespace-normal">{`${r.trade.cashT<0?'將扣款':'將入帳'} ${money(Math.abs(r.trade.cashT))}（台幣）`}</div>:null)}
     <SaveBtn disabled={!ready||!!err} onClick={()=>{if(onSubmit(spec)!==false)onClose();}}/>
   </div></Sheet>);
 }
@@ -931,11 +938,10 @@ function PageDetail({d,setD,c}) {
   const setM=(id,k,patch)=>setD(p=>({...p,accounts:p.accounts.map(a=>a.id===id?{...a,m:{...a.m,[k]:{...a.m[k],...patch}}}:a)}));
   const accRefs=(p,id)=>{ const r=[];   // 找出還在使用這個帳戶 ID 的資料（歷史交易要能回沖，不能讓帳戶消失）
     const nt=sumBy(p.holdings||[],h=>h.trades.filter(t=>t.acct===id).length); if(nt) r.push(`${nt} 筆股票交易（買進／賣出／股息）曾動用這個帳戶，刪除後無法回沖`);
-    const nr=(p.recurring||[]).filter(x=>x.acct===id); if(nr.length) r.push(`定期定額扣款帳戶：${nr.map(x=>x.ticker).join('、')}`);
     if(p.fundPayAcct===id) r.push('未來基金出金帳戶');
     return r; };
   const delAcc=a=>{ const refs=accRefs(d,a.id);
-    if(refs.length){ alert(`無法刪除「${a.name}」，仍有資料使用它：\n・${refs.join('\n・')}\n\n請先改用其他帳戶或取消設定（定期定額到持股明細修改、未來基金出金帳戶到其他帳戶指定）；股票交易紀錄為歷史資料，請保留帳戶，可把餘額轉走後改名為「已停用」。`); return; }
+    if(refs.length){ alert(`無法刪除「${a.name}」，仍有資料使用它：\n・${refs.join('\n・')}\n\n請先改用其他帳戶或取消設定（未來基金出金帳戶到其他帳戶指定）；股票交易紀錄為歷史資料，請保留帳戶，可把餘額轉走後改名為「已停用」。`); return; }
     if(confirm('刪除帳戶「'+a.name+'」？')) setD(p=>accRefs(p,a.id).length?p:{...p,accounts:p.accounts.filter(x=>x.id!==a.id)}); };
   const addAcc=e=>{ e.stopPropagation(); const id=uid(); setD(p=>({...p,accounts:[...p.accounts,{id,name:'新帳戶',demand:0,fixed:0,m:DEF_M()}]})); setOpen(o=>({...o,[id]:true})); setSec(o=>({...o,bank:true})); };
   const setCat=(id,patch)=>setD(p=>({...p,allocation:p.allocation.map(x=>x.id===id?{...x,...patch}:x)}));
@@ -1023,7 +1029,7 @@ function PageDetail({d,setD,c}) {
     </Acc>
 
     <Acc title={<TT n="chart-candlestick">股票持股</TT>} sub={`${d.holdings.length} 檔 · 總市值 ${fmt(mvAll)}`} open={sec.stock} onToggle={()=>tsec('stock')} right={<BI onClick={e=>{e.stopPropagation();setStForm({kind:'new'});}} label="新增" n="message-circle-plus" s={16}/>}>
-      {!d.holdings.length&&<div className="text-xs text-zinc-400 py-3 whitespace-normal">尚無持股。按「新增持股」，或在每月記帳選「投資」類別買股，會自動建立。現價為手動輸入（無即時報價）。</div>}
+      {!d.holdings.length&&<div className="text-xs text-zinc-400 py-3 whitespace-normal">尚無持股。按右上角的新增，輸入股數、平均成本與現價就可以建檔。現價為手動輸入（無即時報價）。</div>}
       {hsorted.map((h,i)=>{const v=holdVals(h);return (
         <div key={h.id}>{(i===0||hsorted[i-1].cur!==h.cur)&&<div className="flex items-center gap-2 pt-2 text-xs font-semibold text-zinc-500"><span>{h.cur==='USD'?'美股':'台股'}</span>{h.cur==='USD'&&<span className="flex items-center gap-1 font-normal text-zinc-400">{fxEdit?<><span>匯率 $</span><NumBox autoFocus dec={3} value={d.fx||32} onChange={v=>setD(p=>({...p,fx:v}))} className="w-16 h-7 px-1 text-xs"/></>:<span>匯率 ${d.fx||32}</span>}<button type="button" aria-label="編輯匯率" onClick={()=>setFxEdit(v=>!v)} className="text-zinc-400"><Ic n={fxEdit?'circle-check':'square-pen'} s={14}/></button></span>}</div>}<div className={`${(i===hsorted.length-1||hsorted[i+1].cur!==h.cur)?'':'border-b-[0.5px] border-neutral-300'} ${open['h'+h.id]?'bg-neutral-100/60 rounded-lg px-2 my-1':''}`}>
           <div className="py-2 flex items-center gap-2 cursor-pointer" onClick={()=>tog('h'+h.id)}>
@@ -1033,25 +1039,24 @@ function PageDetail({d,setD,c}) {
           </div>
           {open['h'+h.id]&&<div className="pb-3">
             <Num label={`現價（${h.cur}）`} value={h.price} onChange={v2=>setHold(h.id,{price:v2})}/>
-            {h.cur==='TWD'&&<label className="flex items-center justify-between gap-3 py-1.5 text-sm"><span className="flex-1 min-w-0 truncate">商品類型（賣出交易稅預設）</span><select value={h.ptype||'stock'} onChange={e=>setHold(h.id,{ptype:e.target.value})} className="h-9 rounded-lg border border-neutral-200 px-2 text-sm bg-white">{PTYPES.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>}
             <div className="flex items-center justify-between mt-2"><span className="text-xs font-semibold text-zinc-500"><TT n="calendar-sync">定期定額</TT></span><BI gray n="message-circle-plus" label="新增定期定額" onClick={()=>setRecForm(h.id)}/></div>
             {!recOf(h).length&&<div className="text-[11px] text-zinc-400 py-1">尚未設定。設定後，每月到扣款日開啟 app 時會提醒是否自動記載買進並扣款。</div>}
             {recOf(h).map(r=>{ const ac=d.accounts.find(a=>a.id===r.acct), amt=r.shares>0?`${Math.round(r.shares*1000)/1000} 股 @ ${Math.round((r.price>0?r.price:r.total/r.shares)*100)/100}`:(r.total>0?fmtC(r.total,h.cur):'未填金額');
               return (<div key={r.id} className="flex items-center gap-2 py-1 text-xs border-b-[0.5px] border-neutral-200">
                 <span className="w-[70px] text-center">每月 {r.day} 號</span><span className="w-9 font-medium text-blue-600">定額</span>
-                <Fit className="flex-1 min-w-0 text-zinc-600">{amt}・{ac?ac.name:'未選帳戶'}</Fit>
-                {(!(r.total>0||r.shares>0)||!ac)&&<span className="shrink-0 text-[9px] text-amber-700">資料不全</span>}
+                <Fit className="flex-1 min-w-0 text-zinc-600">{amt}・提醒</Fit>
+                {!(r.total>0||r.shares>0)&&<span className="shrink-0 text-[9px] text-amber-700">資料不全</span>}
                 <button aria-label="停止定期定額" onClick={()=>delRec(r.id)} className="text-zinc-400">✕</button></div>); })}
-            <div className="flex justify-between text-xs mt-2"><span className="font-semibold text-zinc-500">已實現損益</span><span className={v.realized>=0?'text-green-700':'text-red-600'}>{v.realized>=0?'+':''}{fmtC(v.realized,h.cur)}</span></div>
+            <div className="flex justify-between text-xs mt-2"><span className="font-semibold text-zinc-500">已實現損益<span className="font-normal text-zinc-400">（估算）</span></span><span className={v.realized>=0?'text-green-700':'text-red-600'}>{v.realized>=0?'+':''}{fmtC(v.realized,h.cur)}</span></div>
             <div className="flex justify-between text-xs mt-1"><span className="font-semibold text-zinc-500">股息累計</span><span>{fmtC(v.div,h.cur)}</span></div>
             {(()=>{ const all=[...h.trades].sort((x,y)=>y.date.localeCompare(x.date)), more=all.length>3, shown=more&&!tradeAll[h.id]?all.slice(0,3):all; return <>
               <div className="text-xs font-semibold text-zinc-500 mt-2">交易紀錄</div>
               {shown.map(t=>(<div key={t.id} className="flex items-center gap-2 py-1 text-xs border-b-[0.5px] border-neutral-200">
-                <span className="w-[70px] text-center">{fmtDate(t.date)}</span><span className={`w-9 font-medium ${t.type==='buy'?'text-red-600':t.type==='sell'?'text-green-700':'text-blue-600'}`}>{t.type==='buy'?'買進':t.type==='sell'?'賣出':'股息'}</span>
+                <span className="w-[70px] text-center">{fmtDate(t.date)}</span><span className={`w-9 font-medium ${t.type==='buy'?'text-red-600':t.type==='sell'?'text-green-700':'text-blue-600'}`}>{t.type==='buy'?'買進':t.type==='sell'?'賣出':t.type==='adj'?'校正':'股息'}</span>
                 <Fit className="flex-1 min-w-0 text-zinc-600">{t.type==='div'?fmtC(t.amt,h.cur):`${Math.round(t.shares*1000)/1000} 股 @ ${Math.round(t.price*100)/100}${t.fee?` 費${Math.round(t.fee*100)/100}`:''}${t.tax?` 稅${Math.round(t.tax*100)/100}`:''}`}</Fit>
                 {t.acct&&t.cashT?<span className="shrink-0 px-1 rounded bg-neutral-200 text-[9px] text-zinc-600">{t.cashT<0?'扣款':'入帳'}</span>:null}<button onClick={()=>delTrade(h.id,t.id)} className="text-zinc-400">✕</button></div>))}
               {more&&<button onClick={()=>setTradeAll(o=>({...o,[h.id]:!o[h.id]}))} className="w-full text-center text-[11px] text-zinc-500 py-1.5">{tradeAll[h.id]?'收合':`顯示全部 ${all.length} 筆`}</button>}</>; })()}
-            <div className="flex gap-2 mt-2"><Btn gray onClick={()=>setStForm({kind:'buy',hid:h.id})}>買進</Btn><Btn gray onClick={()=>setStForm({kind:'sell',hid:h.id})}>賣出</Btn><Btn gray onClick={()=>setStForm({kind:'div',hid:h.id})}>股息</Btn><Btn gray danger onClick={()=>delHold(h)}>刪除持股</Btn></div>
+            <div className="flex flex-wrap gap-2 mt-2"><Btn gray onClick={()=>setStForm({kind:'buy',hid:h.id})}>加碼</Btn><Btn gray onClick={()=>setStForm({kind:'sell',hid:h.id})}>減碼</Btn><Btn gray onClick={()=>setStForm({kind:'div',hid:h.id})}>股息</Btn><Btn gray onClick={()=>setStForm({kind:'adj',hid:h.id})}>校正</Btn><Btn gray danger onClick={()=>delHold(h)}>刪除持股</Btn></div>
           </div>}
         </div></div>);})}
     </Acc>
@@ -1128,7 +1133,7 @@ function PageDetail({d,setD,c}) {
         {!hs2.length&&<div className="text-xs text-zinc-400">尚無持股</div>}</>;})()
       :(()=>{const k=pie==='定存'?'fixed':'demand';return <>{d.accounts.filter(a=>{ if(k==='fixed') return true; const hi=((a.m&&a.m.demand&&a.m.demand.rate)||0)>=DEAD_RATE; return pie==='高利活存'?hi:!hi; }).map(a=>{const m=(a.m&&a.m[k])||{};return <div key={a.id} className="flex justify-between gap-2 text-sm py-1.5 border-b-[0.5px] border-neutral-200"><span>{a.name}</span><span>{fmt(a[k])}<span className="text-[10px] text-zinc-400">　{m.rate||0}%{m.exp?` · 到期 ${fmtDate(m.exp)}`:''}</span></span></div>;})}</>;})()}
     </Sheet>}
-    {recForm&&(()=>{ const h=d.holdings.find(x=>x.id===recForm); return h?<RecForm h={h} accounts={d.accounts} onSave={v=>addRec(h,v)} onClose={()=>setRecForm(null)}/>:null; })()}
+    {recForm&&(()=>{ const h=d.holdings.find(x=>x.id===recForm); return h?<RecForm h={h} onSave={v=>addRec(h,v)} onClose={()=>setRecForm(null)}/>:null; })()}
     {stForm&&<StockForm kind={stForm.kind} d={d} hid={stForm.hid} onSubmit={doTrade} onClose={()=>setStForm(null)}/>}
   </div>);
 }
@@ -1403,6 +1408,103 @@ function LoginScreen() {
 }
 
 /* ============ App ============ */
+
+/* ============ 新手引導（只在第一次使用時出現） ============ */
+const ONB_EMPTY=d=>!d.accounts.length&&!d.holdings.length&&!d.tx.length&&!d.history.length&&!d.goals.length&&!d.wishlist.length&&!(d.salary>0)&&!(d.profile&&(d.profile.nick||d.profile.birth))&&!d.allocation.some(c=>c.items.length);
+const needOnb=d=>!d.onboarded&&(!!d.onboard||ONB_EMPTY(d));   // 已完成/略過 → 不再出現；進行到一半（onboard 有值）→ 接續；其他情況只有「全空資料」才會觸發
+const ONB_STEPS=[['user','基本資料'],['landmark','銀行帳戶'],['chart-candlestick','股票持股'],['sliders-horizontal','每月現金分配']];
+const ONB_PRESET={'必要開銷':['房租／房貸','餐飲','水電網路','交通','保險'],'選擇消費':['娛樂','旅遊','購物'],'投資理財':['定期定額投資'],'未來基金':['未來基金']};
+function Onboard({d,setD}) {
+  const [step,setStep]=useState(Math.min((d.onboard&&d.onboard.step)||0,4));
+  const [rows,setRows]=useState(null), [sf,setSf]=useState({cur:'TWD',ticker:'',shares:0,cost:0,price:0});
+  const go=n=>{ setStep(n); setD(p=>({...p,onboard:{step:n}})); };
+  const cleanAcc=()=>setD(p=>({...p,accounts:p.accounts.filter(a=>a.name.trim()||a.demand||a.fixed).map((a,i)=>a.name.trim()?a:{...a,name:'帳戶'+(i+1)})}));
+  const finish=()=>setD(p=>({...p,onboarded:true,onboard:null,...(p.history.length?{}:{snapAsked:curYM()})}));   // 全新使用者沒有「上個月」可補登：本月先不跳補登提醒
+  const initRows=()=>{ const r=[]; d.allocation.forEach(c=>{ c.items.forEach(it=>r.push({cat:c.id,id:it.id,name:it.name,amt:it.amt})); (ONB_PRESET[c.label]||[]).filter(n=>!c.items.some(it=>it.name===n)).forEach(n=>r.push({cat:c.id,id:null,name:n,amt:0})); }); return r; };
+  useEffect(()=>{ if(!d.onboard) setD(p=>p.onboard?p:{...p,onboard:{step}}); },[]);   // 一開始就標記「進行中」，之後填了資料也不會因為「不再是空資料」而消失
+  useEffect(()=>{ if(step===1&&!d.accounts.length) setD(p=>p.accounts.length?p:{...p,accounts:[{id:uid(),name:'',demand:0,fixed:0,m:DEF_M()}]}); if(step===3&&!rows) setRows(initRows()); },[step]);
+  const applyRows=()=>{ if(!rows) return; setD(p=>({...p,allocation:p.allocation.map(c=>{ const mine=rows.filter(r=>r.cat===c.id);
+    const items=c.items.map(it=>{const r=mine.find(x=>x.id===it.id);return r?{...it,amt:r.amt}:it;});
+    mine.filter(r=>!r.id&&r.name.trim()&&r.amt>0).forEach(r=>{ if(!items.some(it=>it.name===r.name.trim())) items.push({id:uid(),name:r.name.trim(),amt:r.amt}); });
+    return {...c,items}; })})); };
+  const next=()=>{ if(step===1) cleanAcc(); if(step===3) applyRows(); go(step+1); };
+  const back=()=>{ if(step===1) cleanAcc(); go(step-1); };
+  const setRow=(i,patch)=>setRows(rs=>rs.map((r,j)=>j===i?{...r,...patch}:r));
+  const addRow=cid=>setRows(rs=>[...rs,{cat:cid,id:null,name:'',amt:0}]);
+  const c=calcAssets(d), salary=d.salary||0;
+  const bal=salary-(rows?sumBy(rows,r=>r.amt):0);
+  const canAdd=sf.ticker.trim()&&sf.shares>0&&sf.cost>0;
+  const addStock=()=>{ const sp={kind:'buy',ticker:sf.ticker.trim().toUpperCase(),cur:sf.cur,ptype:'stock',date:todayISO(),shares:sf.shares,price:sf.cost,fee:0,noBank:true,price0:sf.price||sf.cost}; const r=applyTrade(d,sp); if(r.err){alert(r.err);return;} setD(p=>{const r2=applyTrade(p,sp);return r2.err?p:r2.p;}); setSf(s=>({...s,ticker:'',shares:0,cost:0,price:0})); };
+  const setAccF=(id,patch)=>setD(p=>({...p,accounts:p.accounts.map(x=>x.id===id?{...x,...patch}:x)}));
+  const lab='text-xs text-zinc-500 mb-1', tit=(n,t)=><div className="text-lg font-semibold mb-1"><TT n={ONB_STEPS[n][0]} s={22}>{t}</TT></div>;
+  const body=()=>{
+    if(step===0) return <div className="flex flex-col gap-4">{tit(0,'歡迎使用錢錢💰')}
+      <p className="text-sm text-zinc-500 m-0 leading-6 whitespace-normal">花 1 分鐘建立你的基本資料，之後主頁就有完整的數字。每一步都可以先略過，之後隨時在主頁補上。</p>
+      <div><div className={lab}>暱稱</div><Txt value={d.profile.nick} onChange={v=>setD(p=>({...p,profile:{...p.profile,nick:v}}))} ph="你的暱稱" className="h-11 w-full"/></div>
+      <div><div className={lab}>生日（用來計算 FIRE 達成年齡）</div><DateBox clearable value={d.profile.birth} onChange={v=>setD(p=>({...p,profile:{...p.profile,birth:v}}))}/></div></div>;
+    if(step===1) return <div className="flex flex-col gap-3">{tit(1,'銀行帳戶')}
+      <p className="text-sm text-zinc-500 m-0 leading-6 whitespace-normal">填入目前的存款。利率、高利活存等細節之後到「資產細節」設定。</p>
+      {d.accounts.map(a=>(<Card key={a.id} className="p-3 flex flex-col gap-1">
+        <div className="flex items-center gap-2"><Txt value={a.name} onChange={v=>setAccF(a.id,{name:v})} ph="帳戶名稱（例如：玉山銀行）" className="flex-1 h-11"/>
+          <button aria-label="移除帳戶" onClick={()=>setD(p=>({...p,accounts:p.accounts.filter(x=>x.id!==a.id)}))} className="px-1.5 h-9 text-red-600 shrink-0"><Ic n="trash" s={16}/></button></div>
+        <Num label="活存餘額" value={a.demand} onChange={v=>setAccF(a.id,{demand:v})}/>
+        <Num label="定存金額" value={a.fixed} onChange={v=>setAccF(a.id,{fixed:v})}/></Card>))}
+      <button onClick={()=>setD(p=>({...p,accounts:[...p.accounts,{id:uid(),name:'',demand:0,fixed:0,m:DEF_M()}]}))} className="h-11 rounded-lg border border-dashed border-neutral-300 text-sm text-zinc-600 flex items-center justify-center gap-1.5"><Ic n="plus" s={16}/>再新增一個帳戶</button></div>;
+    if(step===2) return <div className="flex flex-col gap-3">{tit(2,'股票持股')}
+      <p className="text-sm text-zinc-500 m-0 leading-6 whitespace-normal">補登目前持有的股票或 ETF（不會動到銀行餘額）。均價是你的平均買進成本。</p>
+      {d.holdings.map(hd=>{const v=holdVals(hd);return (<Card key={hd.id} className="px-3 py-2 flex items-center gap-2"><div className="flex-1 min-w-0"><div className="text-sm font-semibold">{hd.ticker}　<span className="text-xs font-normal text-zinc-400">{hd.cur==='USD'?'美股':'台股'}</span></div><div className="text-[11px] text-zinc-500">{Math.round(v.sh*1000)/1000} 股 · 均價 {Math.round(v.avg*100)/100}</div></div>
+        <button aria-label="移除持股" onClick={()=>setD(p=>({...p,holdings:p.holdings.filter(x=>x.id!==hd.id)}))} className="px-1.5 h-9 text-red-600 shrink-0"><Ic n="trash" s={16}/></button></Card>);})}
+      <Card className="p-3 flex flex-col gap-1">
+        <div className="flex gap-2 mb-1"><Pill full on={sf.cur==='TWD'} onClick={()=>setSf(s=>({...s,cur:'TWD'}))}>台股</Pill><Pill full on={sf.cur==='USD'} onClick={()=>setSf(s=>({...s,cur:'USD'}))}>美股</Pill></div>
+        <label className="flex items-center justify-between gap-3 py-1.5 text-sm"><span>股票代號</span><Txt value={sf.ticker} onChange={v=>setSf(s=>({...s,ticker:v}))} ph="例如：0050" className="w-32 h-9 text-right"/></label>
+        <Num label="股數" value={sf.shares} onChange={v=>setSf(s=>({...s,shares:v}))} dec={3}/>
+        <Num label={`平均成本（${sf.cur==='USD'?'美元':'台幣'}）`} value={sf.cost} onChange={v=>setSf(s=>({...s,cost:v}))} dec={4}/>
+        <Num label="現價（可留空）" value={sf.price} onChange={v=>setSf(s=>({...s,price:v}))} dec={4}/>
+        {(sf.cur==='USD'||d.holdings.some(x=>x.cur==='USD'))&&<Num label="美元匯率" value={d.fx||32} onChange={v=>setD(p=>({...p,fx:v}))} dec={3}/>}
+        <button disabled={!canAdd} onClick={addStock} className="h-11 rounded-lg bg-black text-white text-sm font-medium disabled:opacity-30 mt-1 flex items-center justify-center gap-1.5"><Ic n="plus" s={16}/>加入這檔持股</button></Card></div>;
+    if(step===3) return <div className="flex flex-col gap-3">{tit(3,'每月現金分配')}
+      <p className="text-sm text-zinc-500 m-0 leading-6 whitespace-normal">先填每月固定分配（薪水），再把它分到各個用途。金額 0 的項目不會建立，之後也能自己新增。</p>
+      <Card className="p-3"><Num label="每月固定分配" value={salary} onChange={v=>setD(p=>({...p,salary:v}))}/></Card>
+      {rows&&d.allocation.filter(ca=>ONB_PRESET[ca.label]).map(ca=>{const mine=rows.map((r,i)=>[r,i]).filter(([r])=>r.cat===ca.id);return (<Card key={ca.id} className="p-3">
+        <div className="flex justify-between text-sm font-semibold mb-1"><span>{ca.label}</span><span className="text-zinc-500">{fmt(sumBy(mine,([r])=>r.amt))}</span></div>
+        {mine.map(([r,i])=>(r.id?<Num key={i} label={r.name} value={r.amt} onChange={v=>setRow(i,{amt:v})}/>
+          :<div key={i} className="flex items-center justify-between gap-3 py-1.5">{ONB_PRESET[ca.label].includes(r.name)?<span className="flex-1 min-w-0 truncate text-sm">{r.name}</span>:<Txt value={r.name} onChange={v=>setRow(i,{name:v})} ph="項目名稱" className="flex-1 h-9"/>}<NumBox value={r.amt} onChange={v=>setRow(i,{amt:v})}/></div>))}
+        <button onClick={()=>addRow(ca.id)} className="mt-1 text-xs text-zinc-500 flex items-center gap-1"><Ic n="plus" s={14}/>自訂項目</button></Card>);})}
+      <div className={`text-sm font-medium text-center ${bal<0?'text-red-600':bal>0?'text-amber-600':'text-green-700'}`}>{salary<=0?'填入每月固定分配後會顯示剩餘':bal<0?`超出 ${fmt(-bal)}`:bal>0?`剩餘未分配 ${fmt(bal)}`:'分配完整 ✓'}</div></div>;
+    return <div className="flex flex-col items-center gap-3 pt-6 text-center"><div className="text-zinc-700"><Ic n="party-popper" s={40}/></div><div className="text-lg font-semibold">設定完成！</div>
+      <Card className="w-full p-4 flex flex-col gap-1.5 text-sm text-left"><div className="flex justify-between"><span className="text-zinc-500">目前總資產</span><span className="font-semibold">{fmt(c.total)}</span></div>
+        <div className="flex justify-between"><span className="text-zinc-500">銀行帳戶</span><span>{d.accounts.length} 個</span></div>
+        <div className="flex justify-between"><span className="text-zinc-500">股票持股</span><span>{d.holdings.length} 檔</span></div>
+        <div className="flex justify-between"><span className="text-zinc-500">每月固定分配</span><span>{fmt(salary)}</span></div>
+        <div className="flex justify-between"><span className="text-zinc-500">未分配</span><span>{fmt(salary-sumBy(d.allocation,catTotal))}</span></div></Card>
+      <p className="text-xs text-zinc-400 m-0 whitespace-normal leading-5">沒填的部分之後可在主頁補上；想再走一次引導，到左上角選單選「重新設定引導」。</p></div>;
+  };
+  const last=step===4;
+  return (<div className="fixed inset-0 z-[35] bg-white flex flex-col" role="dialog" aria-label="新手引導">
+    <div className="w-full max-w-[393px] mx-auto flex flex-col h-full" style={{paddingTop:'env(safe-area-inset-top,0px)'}}>
+      <div className="px-5 pt-5 pb-2"><div className="flex items-center justify-between mb-2"><span className="text-xs text-zinc-400">{last?'完成':`步驟 ${step+1} / 4`}</span>{!last&&<button onClick={()=>{ if(step===1) cleanAcc(); if(step===3) applyRows(); finish(); }} className="text-xs text-zinc-400">略過全部</button>}</div>
+        <div className="flex gap-1.5">{[0,1,2,3].map(i=><i key={i} className={`h-1 flex-1 rounded-full ${i<=step?'bg-black':'bg-neutral-200'}`}/>)}</div></div>
+      <div className="flex-1 overflow-y-auto px-5 py-3">{body()}</div>
+      <div className="px-5 pt-3 flex gap-2 border-t border-neutral-200" style={{paddingBottom:'max(16px,env(safe-area-inset-bottom,0px))'}}>
+        {step>0&&!last&&<button onClick={back} aria-label="上一步" className="h-11 px-4 rounded-lg border border-neutral-200 text-sm flex items-center gap-1"><Ic n="arrow-left" s={16}/>上一步</button>}
+        {!last&&step>0&&<button onClick={next} className="h-11 px-3 text-sm text-zinc-500">稍後再填</button>}
+        <button onClick={last?finish:next} className="h-11 flex-1 rounded-lg bg-black text-white text-sm font-medium">{last?'開始使用':step===3?'完成':'下一步'}</button></div>
+    </div></div>);
+}
+
+/* 定期定額提醒：扣款日後出現，輸入這個月實際買到的股數（金額沿用設定）；不動銀行 */
+function RecRemind({r,d,setD}) {
+  const [sh,setSh]=useState(r.shares>0?r.shares:0), ym=curYM();
+  const mark=p=>({...p,recurring:(p.recurring||[]).map(x=>x.id===r.id?{...x,lastYM:ym}:x)});
+  const save=()=>{ const price=r.total>0?r.total/sh:r.price, sp={kind:'buy',ticker:r.ticker,cur:r.cur,date:todayISO(),shares:sh,price,fee:0,noBank:true}; const t=applyTrade(d,sp); if(t.err){alert(t.err);return;}
+    setD(p=>{const x=applyTrade(p,sp);return mark(x.err?p:x.p);}); };
+  return (<div className="mx-4 mt-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-3 flex flex-col gap-2" role="group" aria-label={`${r.ticker} 定期定額提醒`}>
+    <div className="text-sm font-semibold"><TT n="calendar-sync" s={16}>{r.ticker} 本月定期定額到了</TT></div>
+    <div className="text-xs text-zinc-500 whitespace-normal leading-5">每月 {r.day} 號・{r.total>0?fmtC(r.total,r.cur):'金額未填'}。輸入這個月實際買到的股數（看證券 app），會自動更新持股；不會動銀行餘額。</div>
+    <div className="flex items-center gap-2"><NumBox value={sh} onChange={setSh} dec={3} className="flex-1 h-10 px-3 text-sm"/><span className="text-xs text-zinc-500 shrink-0">股</span></div>
+    <div className="flex gap-2"><button onClick={()=>setD(mark)} className="h-10 px-4 rounded-lg border border-neutral-200 bg-white text-sm">略過本月</button><button disabled={!(sh>0)} onClick={save} className="h-10 flex-1 rounded-lg bg-black text-white text-sm font-medium disabled:opacity-30">記錄</button></div>
+  </div>);
+}
 function App() {
   const [d,setD]=useState(mockData);
   const [tab,setTab]=useState(0);
@@ -1548,16 +1650,6 @@ function App() {
 
   const saveTx=(t0,id)=>{ const t={...t0,date:dateOrToday(t0.date)}; setD(p=>id?{...p,tx:p.tx.map(x=>x.id===id?{...x,...t}:x)}:{...p,tx:[...p.tx,{...t,id:uid()}]}); };
   const delTx=id=>setD(p=>({...p,tx:p.tx.filter(x=>x.id!==id)}));
-  const recDone=useRef(false);
-  useEffect(()=>{   // 定期定額：到期日提醒是否自動記載（餘額不足時不記載並提示）
-    if(!ready||recDone.current) return; recDone.current=true;
-    const ym=todayISO().slice(0,7), day=new Date().getDate();
-    (d.recurring||[]).forEach(r=>{ if(r.lastYM!==ym&&day>=r.day){
-      const ok=confirm(`定期定額提醒：本月 ${r.day} 號 ${r.ticker} 扣款，是否自動記載？`);
-      setD(p=>{ let n=p;
-        if(ok){ const rr=applyInvest(p,r,todayISO(),true); if(rr.err) setTimeout(()=>alert(`定期定額「${r.ticker}」未記載：${rr.err}`),0); else n=rr.p; }
-        return {...n,recurring:n.recurring.map(x=>x.id===r.id?{...x,lastYM:ym}:x)}; }); } });
-  },[ready]);
   const blank={date:todayISO(),type:'expense',cat:'餐飲',item:'',amt:0,note:''};
 
   return (<div className="relative w-full max-w-[393px] mx-auto min-h-screen bg-white overflow-hidden" style={{paddingTop:'env(safe-area-inset-top,0px)'}}>
@@ -1580,6 +1672,7 @@ function App() {
     </nav>
     {!ready&&<div className="py-24 text-center text-sm text-zinc-500">{sync.t.startsWith('初始化失敗')?<><div className="whitespace-normal px-8 leading-5">{sync.t.replace('・點此重試','')}<br/>尚未建立雲端資料，目前不開放編輯，也不會覆蓋任何資料。</div><div className="mt-3"><Btn onClick={retryNow}>重新嘗試</Btn></div></>:'載入中…'}</div>}
     <main key={tab} style={{animation:'fade .18s ease-out',display:ready?'block':'none'}}>
+      {ready&&(d.recurring||[]).filter(r=>r.lastYM!==curYM()&&new Date().getDate()>=r.day).map(r=><RecRemind key={r.id} r={r} d={d} setD={setD}/>)}
       {ready&&!snapLater&&needSnap(d,curYM())&&<div className="mx-4 mt-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-3">
         <div className="text-sm font-semibold"><TT n="camera">該記錄本月資產快照了！</TT></div>
         <div className="text-xs text-zinc-500 leading-5 whitespace-normal mt-1">上個月的資產快照尚未完成，花一點時間更新帳戶餘額與投資資產，讓你的資產趨勢更完整。</div>
@@ -1602,7 +1695,8 @@ function App() {
       <div><div className="text-xs text-zinc-500 mb-1">暱稱</div><Txt value={d.profile.nick} onChange={v=>setD(p=>({...p,profile:{...p.profile,nick:v}}))} ph="你的暱稱" className="h-10 w-full"/></div>
       <div><div className="text-xs text-zinc-500 mb-1">生日（用來計算 FIRE 達成年齡）</div><DateBox clearable value={d.profile.birth} onChange={v=>setD(p=>({...p,profile:{...p.profile,birth:v}}))}/></div>
       {CONFIGURED&&auth.currentUser&&<div className="text-xs text-zinc-500">{auth.currentUser.email}</div>}
-      <button onClick={()=>{if(confirm('清空所有資料（帳戶、記帳、目標、持股…）？此動作無法復原。')){setD(p=>({...mockData,profile:p.profile}));setProfile(false);}}} className="h-11 rounded-lg border border-neutral-200 text-sm font-medium text-red-600">清空所有資料</button>
+      <button onClick={()=>{if(confirm('清空所有資料（帳戶、記帳、目標、持股…）？此動作無法復原。')){setD(p=>({...mockData,profile:p.profile,onboarded:p.onboarded,onboard:null}));setProfile(false);}}} className="h-11 rounded-lg border border-neutral-200 text-sm font-medium text-red-600">清空所有資料</button>
+      <button onClick={()=>{setProfile(false);setD(p=>({...p,onboarded:false,onboard:{step:0}}));}} className="h-11 rounded-lg border border-neutral-200 text-sm font-medium">重新設定引導</button>
       {CONFIGURED&&<button onClick={()=>{setProfile(false);auth.signOut();}} className="h-11 rounded-lg border border-neutral-200 text-sm font-medium">登出</button>}
     </div></Sheet>}
     {calcCfg&&<CalcPad cfg={calcCfg} onClose={()=>setCalcCfg(null)}/>}
@@ -1612,6 +1706,7 @@ function App() {
       <p className="text-xs text-zinc-400 whitespace-normal m-0">你的雲端資料沒有被修改或覆蓋。</p>
       <div className="flex gap-3"><button onClick={()=>location.reload()} className="h-11 px-5 rounded-lg bg-black text-white text-sm font-medium">重新整理</button>{CONFIGURED&&<button onClick={()=>auth.signOut()} className="h-11 px-5 rounded-lg border border-neutral-200 text-sm font-medium">登出</button>}</div>
     </div>}
+    {ready&&!blocked&&authState==='in'&&needOnb(d)&&<Onboard d={d} setD={setD}/>}
     {CONFIGURED&&authState==='out'&&<LoginScreen/>}
   </div>);
 }

@@ -768,10 +768,11 @@ function PageMy({d,setD,fund,c,mom}) {
   const yr=years.includes(yrSel)?yrSel:nowY, yi=years.indexOf(yr);
   const hs=allH.filter(r=>ymYear(r.ym)===yr).map(r=>({...r,m:ymMonth(r.ym)}));
   const vals=hs.flatMap(r=>[r.total,r.cash,r.fixed,r.invest]);
-  // Y 軸（NTD）：最小值固定 $0；最大值 = 圖中最高值（含總資產）×1.1 後向上取到 1／2／5×10ⁿ 的整齊級距，最多 5 格（6 個刻度）；資料變動時自動調整
-  const dmax=Math.max(0,...vals), need=(dmax>0?dmax:500000)*1.1;
-  let step=1; outer: for(let k=-3;k<14;k++) for(const mu of [1,2,5]){const st=mu*Math.pow(10,k); if(st*5>=need){step=st;break outer;}}
-  const nT=Math.max(2,Math.ceil(need/step-1e-9)), yMax=nT*step, ticks=Array.from({length:nT+1},(_,k)=>k);
+  // Y 軸：最小值固定 $0；最大值 = 圖中最高值（含總資產）×1.05 後，從 1／2／2.5／5×10ⁿ 的整齊級距、3～5 格中挑「剛好蓋住資料的最小上限」（4～6 個刻度）；資料變動時自動調整
+  const dmax=Math.max(0,...vals), need=(dmax>0?dmax:500000)*1.05;
+  let step=1, nT=5, bestMax=Infinity;
+  for(let k=-2;k<14;k++) for(const mu of [1,2,2.5,5]) for(const n of [3,4,5]){ const st=mu*Math.pow(10,k), mx=st*n; if(mx>=need-1e-9&&(mx<bestMax-1e-9||(Math.abs(mx-bestMax)<1e-9&&n>nT))){bestMax=mx;step=st;nT=n;} }
+  const yMax=nT*step, ticks=Array.from({length:nT+1},(_,k)=>k);
   const fmtY=v=>HIDE?'••':v===0?'$0':v>=1e9?`$${+(v/1e9).toFixed(2)}B`:v>=1e6?`$${(v/1e6).toFixed(1)}M`:v>=1e3?`$${+(v/1e3).toFixed(1)}K`:`$${v}`;
   const x=m=>48+(m-1)*(288/11), y=v=>240-Math.max(0,v)/yMax*180;
   const LINES=[['total','總資產','#2563eb'],['cash','現金','#22c55e'],['fixed','定存','#15803d'],['invest','投資','#a855f7']];
@@ -802,7 +803,6 @@ function PageMy({d,setD,fund,c,mom}) {
         {years.length>1&&<g fontSize="14" fill="#52525b"><text x="200" y="29" textAnchor="middle" style={{cursor:'pointer',opacity:yi>0?1:.25}} onClick={e=>{e.stopPropagation();if(yi>0){setYrSel(years[yi-1]);setTip(null);}}}>‹</text><text x="222" y="29" textAnchor="middle" style={{cursor:'pointer',opacity:yi<years.length-1?1:.25}} onClick={e=>{e.stopPropagation();if(yi<years.length-1){setYrSel(years[yi+1]);setTip(null);}}}>›</text></g>}
         {LINES.map(([k,l,col],i)=><g key={k} transform={`translate(${16+i*58},46)`}><circle cx="4" cy="0" r="4" fill={col}/><text x="12" y="3.5" fontSize="10" fill="#52525b">{l}</text></g>)}
         {live.length>0&&yr===nowY&&<text x="262" y="49" fontSize="9" fill="#a1a1aa">○ 本月即時</text>}
-        <text x="42" y="56" fontSize="9" fill="#a1a1aa" textAnchor="end">NTD</text>
         {ticks.map(k=>{const gy=240-k*180/nT; return <line key={k} x1="48" x2="336" y1={gy} y2={gy} stroke="#e5e5e5" strokeOpacity={k===0?1:.5}/>;})}
         {ticks.map(k=><text key={k} x="42" y={243-k*180/nT} fontSize="10" fill="#71717a" textAnchor="end">{fmtY(k*step)}</text>)}
         {months.map((m,i)=><text key={m} x={x(i+1)} y="254" fontSize="10" fill="#71717a" textAnchor="middle">{m}</text>)}

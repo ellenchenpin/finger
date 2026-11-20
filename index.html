@@ -593,7 +593,7 @@ function NumBox({value,onChange,className='w-32 h-9 px-3 text-sm',autoFocus,dec}
   const [s,setS]=useState(String(value));
   useEffect(()=>{ if(Number(s||0)!==value) setS(String(value)); },[value]);
   if(calc) return <input readOnly inputMode="none" value={addCommas(String(value))} onClick={()=>OPEN_CALC({value,onChange})} className={`rounded-lg border border-neutral-200 text-right bg-white min-w-0 cursor-pointer ${className}`}/>;
-  return <input value={s===''||s==='0'?'':addCommas(s)} placeholder="0" inputMode="decimal" autoFocus={autoFocus} onChange={e=>{let v=e.target.value.replace(/[^\d.]/g,'').replace(/^0+(?=\d)/,''); if(dec!=null&&v.includes('.')){const [ip,fp]=v.split('.');v=ip+'.'+fp.slice(0,dec);} setS(v);onChange(Number(v)||0);}} className={`rounded-lg border border-neutral-200 text-right bg-white min-w-0 placeholder:text-zinc-900 focus:placeholder:text-transparent ${className}`}/>;   // 數字是 0 時輸入格是空的：沒點進去顯示 0（placeholder），點進去 0 消失，直接輸入
+  return <input value={s===''||s==='0'?'':addCommas(s)} placeholder="0" inputMode="decimal" autoFocus={autoFocus} onFocus={e=>{const t=e.target; setTimeout(()=>{try{t.select();}catch(_){}},0);}} onChange={e=>{let v=e.target.value.replace(/[^\d.]/g,'').replace(/^0+(?=\d)/,''); if(dec!=null&&v.includes('.')){const [ip,fp]=v.split('.');v=ip+'.'+fp.slice(0,dec);} setS(v);onChange(Number(v)||0);}} className={`rounded-lg border border-neutral-200 text-right bg-white min-w-0 placeholder:text-zinc-900 focus:placeholder:text-transparent ${className}`}/>;   // 數字是 0 時輸入格是空的：沒點進去顯示 0（placeholder），點進去 0 消失，直接輸入
 }
 const Num=({label,value,onChange,dec})=>(<label className="flex items-center justify-between gap-3 py-1.5 text-sm"><span className="flex-1 min-w-0 truncate">{label}</span><NumBox value={value} onChange={onChange} dec={dec}/></label>);
 const Txt=({value,onChange,ph,className=''})=><input value={value} placeholder={ph} onChange={e=>onChange(e.target.value)} className={`h-9 rounded-lg border border-neutral-200 px-3 text-sm bg-white min-w-0 ${className}`}/>;
@@ -832,8 +832,7 @@ function PageMy({d,setD,fund,c,mom}) {
       const fundSaved=poolOf(d), useShort=cf.exShort!=null?cf.exShort:(cf.shortAmt||0)>0;
       const depOn=!!(cf.inc.demand||cf.inc.td), nPts=((f.gp||{parts:[]}).parts||[]).length;
       const Ex=({on,onChange,label,right})=><label className={`flex items-center justify-between gap-2 py-1.5 text-sm ${depOn?'':'opacity-40'}`}><span className="flex items-center gap-2"><input type="checkbox" className="accent-red-500" disabled={!depOn} checked={!!on&&depOn} onChange={e=>onChange(e.target.checked)}/>{label}</span>{right}</label>;
-      return <Sheet title="FIRE 設定" onClose={()=>{setSheet(null);setFEdit(false);}}>
-      <div className="flex items-center gap-1.5 mb-1"><span className="text-sm font-semibold">FIRE 說明</span><InfoI on={fInfo} label="FIRE 設定說明" onClick={()=>setFInfo(v=>!v)}/></div>
+      return <Sheet title={<span className="inline-flex items-center gap-1.5">FIRE 設定<InfoI on={fInfo} label="FIRE 設定說明" onClick={()=>setFInfo(v=>!v)}/></span>} onClose={()=>{setSheet(null);setFEdit(false);}}>
       {fInfo&&<div className="mb-3 p-2.5 rounded-lg bg-neutral-50"><Bullets items={[
         'FIRE 目標 = (年支出 − 退休後持續收入) ÷ 安全提領率，以今日幣值計算。',
         '報酬以實質年化報酬率複利；每月投入與年獎金視為固定名目金額，會依通膨折算成今日幣值後才加入。',
@@ -858,13 +857,13 @@ function PageMy({d,setD,fund,c,mom}) {
           '安全提領率：退休後每年可從資產提領的比例（%）。',
           '存款直接用帳戶利率再扣通膨（不扣成本，利息稅未計）。',
           '以上都是假設值，請依自己的投資內容與稅務情況調整；實際報酬不保證。']}/></div>}
-        <Num label="保守股票報酬率" value={cf.cons} dec={1} onChange={v=>setF({cons:v})}/>
-        <Num label="中性股票報酬率" value={cf.mid} dec={1} onChange={v=>setD(p=>({...p,fireRet:v}))}/>
-        <Num label="樂觀股票報酬率" value={cf.opt} dec={1} onChange={v=>setF({opt:v})}/>
-        <Num label="通膨率" value={cf.infl} dec={1} onChange={v=>setF({infl:v})}/>
-        <Num label="投資成本" value={cf.cost} dec={2} onChange={v=>setF({cost:v})}/>
-        <Num label="稅費" value={cf.tax} dec={1} onChange={v=>setF({tax:v})}/>
-        <Num label="安全提領率" value={cf.swr} dec={1} onChange={v=>setF({swr:v})}/>
+        <Num label="保守股票報酬率%" value={cf.cons} dec={1} onChange={v=>setF({cons:v})}/>
+        <Num label="中性股票報酬率%" value={cf.mid} dec={1} onChange={v=>setD(p=>({...p,fireRet:v}))}/>
+        <Num label="樂觀股票報酬率%" value={cf.opt} dec={1} onChange={v=>setF({opt:v})}/>
+        <Num label="通膨率%" value={cf.infl} dec={1} onChange={v=>setF({infl:v})}/>
+        <Num label="投資成本%" value={cf.cost} dec={2} onChange={v=>setF({cost:v})}/>
+        <Num label="稅費%" value={cf.tax} dec={1} onChange={v=>setF({tax:v})}/>
+        <Num label="安全提領率%" value={cf.swr} dec={1} onChange={v=>setF({swr:v})}/>
       </div>}
       <div className="text-sm font-semibold mt-4">退休後每月支出</div>
       <Row l="基本 每月（必要開銷）" v={f.ess}/>
@@ -1239,7 +1238,7 @@ function SwipeLeft({open,onOpen,onClose,onTap,actions,children}) {
 }
 function PageGoals({d,setD,fund}) {
   const [form,setForm]=useState(null);   // {kind:'goal'|'wish', id?}
-  const [swp,setSwp]=useState(null);
+  const [swp,setSwp]=useState(null), [catF,setCatF]=useState('all');   // catF：只是畫面篩選，不存進資料
   const [pri,setPri]=useState('mid'), [name,setName]=useState(''), [budget,setBudget]=useState(0), [gdate,setGdate]=useState(''), [gplace,setGplace]=useState('cash'), [gterm,setGterm]=useState('none');
   const openForm=(kind,it)=>{setPri(it&&it.pri||'mid');setName(it?it.name:'');setBudget(it?it.budget:0);setGdate(it&&it.date||'');setGterm(!it?'mid':!it.date?'':(it.est&&goalMonths(it)!=null)?termOfMonths(goalMonths(it)):'date');setGplace(it&&it.place==='invest'?'invest':'cash');setForm({kind,id:it&&it.id});};
   const saveForm=()=>{
@@ -1272,31 +1271,45 @@ function PageGoals({d,setD,fund}) {
   const stOf=g=>{ if(g.done) return ['已完成','text-zinc-400']; const i=GI[g.id]||{}; return i.st==='ready'?['✓ 現在已可達成','text-green-600']:i.st==='onTrack'?['到期前可達成','text-blue-600']:i.st==='short'?[`⚠ 缺 ${fmt(i.lack)}`,'text-red-600']:i.st==='due'?['已到期・待支付','text-amber-600']:['未填日期','text-zinc-400']; };
   const subOf=g=>{ if(g.done) return `${(g.paidAt||'').slice(0,10).replace(/-/g,'/')} 已支付`; const i=GI[g.id]||{}, pl=i.place==='invest'?'投資':'現金';
     if(!g.date) return `${pl}・暫不參與 FIRE`; const m=goalMonths(g); return `${g.est?'約 ':''}${g.date.slice(0,7).replace('-','/')}${m!=null?'・'+termLabel(m):''}・${pl}`; };
-  const sortedG=[...d.goals.filter(g=>!g.done).sort(goalCmp),...d.goals.filter(g=>g.done)];
+  const catN=k=>d.goals.filter(g=>!g.done&&(k==='all'||(g.pri||'mid')===k)).length, catS=k=>sumBy(d.goals.filter(g=>!g.done&&(k==='all'||(g.pri||'mid')===k)),g=>g.budget||0);
+  const cats=['all',...['high','mid','low'].filter(k=>catN(k)>0)], catSel=cats.includes(catF)?catF:'all';
+  const sortedG0=[...d.goals.filter(g=>!g.done).sort(goalCmp),...d.goals.filter(g=>g.done)], sortedG=catSel==='all'?sortedG0:sortedG0.filter(g=>!g.done&&(g.pri||'mid')===catSel);
   const GR='grid grid-cols-[10px_1fr_76px_76px] gap-2 px-3 items-center';   // 項目最寬；預算、狀態等寬置中
   const WR='grid grid-cols-[1fr_80px_44px] gap-2 px-3 items-center';
   return (<div className="px-4 pt-[17px]">
-    <div className="grid grid-cols-2 gap-3">
-      <Card className="p-4 h-[184px] min-w-0 flex flex-col">
-        <div className="text-xs font-semibold leading-4 text-zinc-500">目標金額</div>
-        <Fit className="text-lg font-semibold leading-7 text-right">{fmt(fund.target)}</Fit>
-        <div className="text-xs font-semibold leading-4 text-zinc-500">－ 未來基金</div>
-        <Fit className="text-lg font-semibold leading-7 text-right text-green-500">{fmt(fund.saved)}</Fit>
-        <div className="border-t border-black my-1"/>
-        <div className="text-xs font-semibold leading-4 text-zinc-500">＝ 尚需準備</div>
-        <Fit className="text-lg font-semibold leading-7 text-right text-red-500">{fmt(remaining)}</Fit>
-      </Card>
-      <Card className="p-4 h-[184px] min-w-0 flex flex-col">
-        <div className="text-sm font-semibold leading-5">達成率</div>
-        <Fit className="text-3xl font-semibold leading-10">{fund.rate.toFixed(2)}%</Fit>
-        <div className="text-sm font-semibold leading-5 mt-5">預計達成</div>
-        <Fit className="text-2xl font-semibold leading-8">{eta}</Fit>
-        {etaSub&&<Fit className="text-[10px] text-zinc-500 mt-0.5">{etaSub}</Fit>}
-      </Card>
-    </div>
+    <Card className="p-4">
+      <div className="flex items-baseline justify-between"><span className="text-sm font-semibold"><TT n="piggy-bank">未來基金</TT></span><span className="text-[10px] tracking-[0.14em] text-zinc-400">FUTURE FUND</span></div>
+      <div className="grid grid-cols-2 gap-2.5 mt-3 items-stretch">
+        <div className="min-w-0 rounded-[18px] bg-[#F5E9DC] p-3 flex flex-col" aria-label="目前財務狀況">
+          <div className="text-[9px] tracking-[0.12em] text-[#997657]">01 / CURRENT STATUS</div>
+          <div className="text-xs font-semibold mt-1.5">目前財務狀況</div>
+          <div className="text-[10px] text-[#997657] mt-2.5">目標金額</div>
+          <Fit className="text-sm font-medium tabular-nums text-right">{fmt(fund.target)}</Fit>
+          <div className="text-[10px] text-[#997657] mt-1.5">－ 已累積</div>
+          <Fit className="text-sm font-medium tabular-nums text-right">{fmt(fund.saved)}</Fit>
+          <div className="border-t-[0.5px] border-[#997657]/50 mt-1.5 mb-1.5"/>
+          <div className="text-[10px] text-[#997657]">＝ 尚需準備</div>
+          <Fit className="text-lg font-semibold tabular-nums text-right text-[#D68B4D]">{fmt(remaining)}</Fit>
+          <div className="mt-auto pt-2.5 flex items-baseline justify-between gap-1"><span className="text-[10px] text-[#997657]">累積比例</span><Fit className="text-xs font-medium tabular-nums text-[#D68B4D] text-right">{fund.rate.toFixed(2)}%</Fit></div>
+          <div className="h-1.5 rounded-full bg-[#997657]/20 overflow-hidden mt-1"><div className="h-full rounded-full bg-[#D68B4D]" style={{width:`${Math.max(0,Math.min(100,fund.rate))}%`}}/></div>
+        </div>
+        <div className="min-w-0 rounded-[18px] border border-neutral-200 p-3 flex flex-col" aria-label="未來預測">
+          <div className="text-[9px] tracking-[0.12em] text-zinc-500">02 / FORECAST</div>
+          <div className="text-xs font-semibold mt-1.5">未來預測</div>
+          <div className="text-[10px] text-zinc-500 mt-2.5">預計達成日期</div>
+          <Fit className="text-2xl font-semibold tabular-nums text-[#D68B4D] leading-9">{eta}</Fit>
+          <div className="border-t-[0.5px] border-neutral-200 my-2.5"/>
+          <div className="text-[10px] text-zinc-500">預計達成時間</div>
+          <Fit className="text-sm font-semibold tabular-nums mt-0.5">{mths==null?'—':mths===0?'已達成':`約 ${fmtDur(mths)}`}</Fit>
+          <div className="mt-auto pt-2.5 flex items-center gap-1 text-[10px] text-zinc-500 min-w-0"><span className="text-[#D68B4D] shrink-0"><Ic n="trending-up" s={14}/></span><span className="min-w-0 whitespace-normal leading-3">依目前資金規劃推估</span></div>
+        </div>
+      </div>
+    </Card>
     {!payAcs.length&&<div className="mt-2 text-[11px] text-amber-600 whitespace-normal leading-4">尚未指定未來基金出金帳戶，未來基金金額為 0。到「資產細節 → 銀行帳戶」展開帳戶，勾選「未來基金出金帳戶」（可複選），未來基金就會等於勾選帳戶的活存餘額加總。</div>}
     {payAcs.length>0&&<div className="mt-2 text-[11px] text-zinc-400 whitespace-normal leading-4">未來基金 = {payAcs.map(a=>`「${a.name}」`).join('、')}的活存餘額{payAcs.length>1?'加總':''}。</div>}
     <div className="mt-6 flex items-center justify-between"><div className="text-sm font-semibold"><TT n="piggy-bank">未來基金項目</TT></div><BI n="message-circle-plus" label="新增項目" onClick={()=>openForm('goal')}/></div>
+    {cats.length>1&&<div className="mt-2" aria-label="未來基金分類"><div className="flex gap-1.5 overflow-x-auto pb-0.5">{cats.map(k=>{const on=catSel===k; return <button key={k} type="button" aria-pressed={on} aria-label={`分類 ${k==='all'?'全部':PRI[k].l}`} onClick={()=>setCatF(k)} className={`h-7 px-3 rounded-full text-xs shrink-0 inline-flex items-center gap-1.5 ${on?'bg-[#D68B4D] text-white font-medium':'bg-neutral-100 text-zinc-600'}`}>{k!=='all'&&<i className="w-1.5 h-1.5 rounded-full" style={{background:on?'#fff':PRI[k].c}}/>}{k==='all'?'全部':PRI[k].l}<span className={`text-[10px] tabular-nums ${on?'text-white/80':'text-zinc-400'}`}>{catN(k)}</span></button>;})}</div>
+      <div className="text-[10px] text-zinc-400 mt-1.5 tabular-nums">{catSel==='all'?'全部進行中':`${PRI[catSel].l}優先級`}：{catN(catSel)} 項・預算 {fmt(catS(catSel))}</div></div>}
     <div className="mt-1">
       <div className={`${GR} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span/><span>項目</span><span className="text-center">預算</span><span className="text-center">狀態</span></div>
       {sortedG.map(g=>{ const [stT,stC]=stOf(g), payable=!g.done&&GI[g.id]&&(GI[g.id].st==='ready'||GI[g.id].st==='due'); return (

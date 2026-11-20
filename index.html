@@ -768,13 +768,14 @@ function PageMy({d,setD,fund,c,mom}) {
   const yr=years.includes(yrSel)?yrSel:nowY, yi=years.indexOf(yr);
   const hs=allH.filter(r=>ymYear(r.ym)===yr).map(r=>({...r,m:ymMonth(r.ym)}));
   const vals=hs.flatMap(r=>[r.total,r.cash,r.fixed,r.invest]);
-  // Y 軸：最小值固定 $0；最大值 = 圖中最高值（含總資產）×1.05 後，從 1／2／2.5／5×10ⁿ 的整齊級距、3～5 格中挑「剛好蓋住資料的最小上限」（4～6 個刻度）；資料變動時自動調整
-  const dmax=Math.max(0,...vals), need=(dmax>0?dmax:500000)*1.05;
+  // Y 軸：最小值固定 $0；最大值緊貼資料（最高值 ×1.04 留一點上方空間）。刻度優先用整齊級距（1／2／2.5／5×10ⁿ，3～5 格），整齊的級距會讓上限多出超過 3% 時，就改用「剛好蓋住資料」的 2 位有效數字級距（4～5 格，刻度間距仍相等）；資料變動時自動調整
+  const dmax=Math.max(0,...vals), need=(dmax>0?dmax:500000)*1.04;
   let step=1, nT=5, bestMax=Infinity;
-  for(let k=-2;k<14;k++) for(const mu of [1,2,2.5,5]) for(const n of [3,4,5]){ const st=mu*Math.pow(10,k), mx=st*n; if(mx>=need-1e-9&&(mx<bestMax-1e-9||(Math.abs(mx-bestMax)<1e-9&&n>nT))){bestMax=mx;step=st;nT=n;} }
-  const yMax=nT*step, ticks=Array.from({length:nT+1},(_,k)=>k);
-  const fmtY=v=>HIDE?'••':v===0?'$0':v>=1e9?`$${+(v/1e9).toFixed(2)}B`:v>=1e6?`$${(v/1e6).toFixed(1)}M`:v>=1e3?`$${+(v/1e3).toFixed(1)}K`:`$${v}`;
-  const x=m=>48+(m-1)*(288/11), y=v=>240-Math.max(0,v)/yMax*180;
+  for(let k=-2;k<14;k++) for(const mu of [1,2,2.5,5]) for(const n of [3,4,5]){ const st=mu*Math.pow(10,k), mx=st*n; if(mx>=need-1e-9&&mx<=need*1.03&&(mx<bestMax-1e-9||(Math.abs(mx-bestMax)<1e-9&&n>nT))){bestMax=mx;step=st;nT=n;} }
+  if(bestMax===Infinity) for(const n of [4,5]){ const u=Math.pow(10,Math.floor(Math.log10(need/n))-1), st=Math.ceil(need/n/u-1e-9)*u, mx=st*n; if(mx<bestMax-1e-9||(Math.abs(mx-bestMax)<1e-9&&n>nT)){bestMax=mx;step=st;nT=n;} }
+  const yMax=nT*step, ticks=Array.from({length:nT+1},(_,k)=>k), Y0=66, YH=174;   // 圖表區 y=66～240：與上方圖例保留距離
+  const fmtY=v=>HIDE?'••':v===0?'$0':v>=1e9?`$${+(v/1e9).toFixed(2)}B`:v>=1e6?`$${(v/1e6).toFixed(2).replace(/(\.\d)0$/,'$1')}M`:v>=1e3?`$${+(v/1e3).toFixed(1)}K`:`$${+v.toFixed(0)}`;
+  const x=m=>48+(m-1)*(288/11), y=v=>240-Math.max(0,v)/yMax*YH;
   const LINES=[['total','總資產','#2563eb'],['cash','現金','#22c55e'],['fixed','定存','#15803d'],['invest','投資','#a855f7']];
   const path=k=>hs.map((r,i)=>(i?'L':'M')+x(r.m).toFixed(1)+' '+y(r[k]).toFixed(1)).join(' ');
   const area=hs.length>1?`${path('total')} L${x(hs[hs.length-1].m).toFixed(1)} 240 L${x(hs[0].m).toFixed(1)} 240 Z`:'';
@@ -803,8 +804,8 @@ function PageMy({d,setD,fund,c,mom}) {
         {years.length>1&&<g fontSize="14" fill="#52525b"><text x="200" y="29" textAnchor="middle" style={{cursor:'pointer',opacity:yi>0?1:.25}} onClick={e=>{e.stopPropagation();if(yi>0){setYrSel(years[yi-1]);setTip(null);}}}>‹</text><text x="222" y="29" textAnchor="middle" style={{cursor:'pointer',opacity:yi<years.length-1?1:.25}} onClick={e=>{e.stopPropagation();if(yi<years.length-1){setYrSel(years[yi+1]);setTip(null);}}}>›</text></g>}
         {LINES.map(([k,l,col],i)=><g key={k} transform={`translate(${16+i*58},46)`}><circle cx="4" cy="0" r="4" fill={col}/><text x="12" y="3.5" fontSize="10" fill="#52525b">{l}</text></g>)}
         {live.length>0&&yr===nowY&&<text x="262" y="49" fontSize="9" fill="#a1a1aa">○ 本月即時</text>}
-        {ticks.map(k=>{const gy=240-k*180/nT; return <line key={k} x1="48" x2="336" y1={gy} y2={gy} stroke="#e5e5e5" strokeOpacity={k===0?1:.5}/>;})}
-        {ticks.map(k=><text key={k} x="42" y={243-k*180/nT} fontSize="10" fill="#71717a" textAnchor="end">{fmtY(k*step)}</text>)}
+        {ticks.map(k=>{const gy=240-k*YH/nT; return <line key={k} x1="48" x2="336" y1={gy} y2={gy} stroke="#e5e5e5" strokeOpacity={k===0?1:.5}/>;})}
+        {ticks.map(k=><text key={k} x="42" y={243-k*YH/nT} fontSize="10" fill="#71717a" textAnchor="end">{fmtY(k*step)}</text>)}
         {months.map((m,i)=><text key={m} x={x(i+1)} y="254" fontSize="10" fill="#71717a" textAnchor="middle">{m}</text>)}
         {area&&<path d={area} fill="url(#g)"/>}
         {hs.length>1&&LINES.map(([k,,col])=><path key={k} d={path(k)} fill="none" stroke={col} strokeWidth={k==='total'?3:2} strokeLinejoin="round" strokeLinecap="round"/>)}

@@ -1279,8 +1279,7 @@ function PageGoals({d,setD,fund}) {
   return (<div className="px-4 pt-[17px]">
     <div className="grid grid-cols-2 gap-2.5 items-stretch">
         <div className="min-w-0 rounded-[18px] bg-[#F5E9DC] p-3 flex flex-col" aria-label="目前財務狀況">
-          <div className="text-[9px] tracking-[0.12em] text-[#997657]">01 / CURRENT STATUS</div>
-          <div className="text-xs font-semibold mt-1.5">目前財務狀況</div>
+          <div className="text-xs font-semibold">目前財務狀況</div>
           <div className="text-[10px] text-[#997657] mt-2.5">目標金額</div>
           <Fit className="text-sm font-medium tabular-nums text-right">{fmt(fund.target)}</Fit>
           <div className="text-[10px] text-[#997657] mt-1.5">－ 已累積</div>
@@ -1292,8 +1291,7 @@ function PageGoals({d,setD,fund}) {
           <div className="h-1.5 rounded-full bg-[#997657]/20 overflow-hidden mt-1"><div className="h-full rounded-full bg-[#D68B4D]" style={{width:`${Math.max(0,Math.min(100,fund.rate))}%`}}/></div>
         </div>
         <div className="min-w-0 rounded-[18px] border border-neutral-200 p-3 flex flex-col" aria-label="未來預測">
-          <div className="text-[9px] tracking-[0.12em] text-zinc-500">02 / FORECAST</div>
-          <div className="text-xs font-semibold mt-1.5">未來預測</div>
+          <div className="text-xs font-semibold">未來預測</div>
           <div className="text-[10px] text-zinc-500 mt-2.5">預計達成日期</div>
           <Fit className="text-2xl font-semibold tabular-nums text-[#D68B4D] leading-9">{eta}</Fit>
           <div className="border-t-[0.5px] border-neutral-200 my-2.5"/>

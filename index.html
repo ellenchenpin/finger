@@ -77,14 +77,16 @@ const catTotal=c=>sumBy(c.items,i=>i.amt);          // 分配金額 = 子項目�
 const DEAD_RATE=1;          // 活存年利率 <1% = 一般活存（死水資產）；≥1% = 系統判定為高利活存
 const DEF_M=()=>({demand:{rate:0,exp:'',cap:0},fixed:{rate:0,exp:'',cap:0}});
 const AT=[['demand','活存'],['fixed','定存']];
+const expDays=e=>(new Date(String(e).replace(/-/g,'/'))-Date.now())/86400000;   // 距離到期日的天數（負 = 已過）
 function acctInfo(a){   // 年利率、單利、按日計息（實際天數 ÷ 365）、月補給息
   const t=new Date(), dm=new Date(t.getFullYear(),t.getMonth()+1,0).getDate();
   let interest=0,mInterest=0,dead=0,def=0,ef=0,mr=0;
   AT.forEach(([k])=>{const v=a[k]||0,m=(a.m&&a.m[k])||{},r=m.rate||0,cap=m.cap||0,base=cap>0?Math.min(v,cap):v;
     if(v>0&&r>0){interest+=base*r/100; mInterest+=base*r/100*dm/365;}
-    if(m.ef) ef+=v; if(v>0) mr=Math.max(mr,r);
+    if(m.ef) ef+=v; if(k==='demand'&&v>0) mr=r;
     if(k==='demand'&&r<DEAD_RATE) dead+=v; else def+=v;});
-  return {interest,mInterest,dead,def,ef,tag:mr>=1?'生息':'普通'};
+  const exp=AT.some(([k])=>{const e=a.m&&a.m[k]&&a.m[k].exp; return e&&(a[k]||0)>0&&expDays(e)<-7;});   // 到期日已過超過 7 天（不影響利息計算，只做提醒）
+  return {interest,mInterest,dead,def,ef,tag:(a.demand||0)>0?(mr>=DEAD_RATE?'生息':'普通'):null,expired:exp};
 }
 function holdVals(h){   // 依交易紀錄（日期、輸入先後）逐筆重算；成本含買進手續費；賣出 = 扣手續費與交易稅後的淨額
   const ts=h.trades.map((t,i)=>[t,i]).sort((a,b)=>a[0].date.localeCompare(b[0].date)||a[1]-b[1]).map(x=>x[0]);
@@ -148,7 +150,9 @@ function simFire2(dep,stk,target,monthly,by,rrD,rrS,infl,maxM=1200,gp){   // gp�
 }
 // 未來目標 × FIRE：「未來基金」是一個池子，金額 = 「未來基金出金帳戶」的活存餘額（沒指定帳戶 = 0），不需手動輸入。
 // 系統依 優先級→使用日期 把它依序分給各目標（不需要手動填每項金額），有預計使用時間的目標才參與 FIRE 試算
-const poolOf=d=>{ const a=(d.accounts||[]).find(x=>x.id===d.fundPayAcct); return a?Math.max(0,a.demand||0):0; };
+const payIds=d=>Array.isArray(d.fundPayAccts)?d.fundPayAccts:(d.fundPayAcct?[d.fundPayAcct]:[]);   // 出金帳戶（可複選）；舊資料只有 fundPayAcct 單一值時照常讀取
+const payAccts=d=>payIds(d).map(id=>(d.accounts||[]).find(a=>a.id===id)).filter(Boolean);
+const poolOf=d=>sumBy(payAccts(d),a=>Math.max(0,a.demand||0));   // 未來基金 = 所有出金帳戶的活存餘額加總
 const goalCmp=(a,b)=>({high:0,mid:1,low:2}[a.pri]??1)-({high:0,mid:1,low:2}[b.pri]??1) || ((a.date||'9999')<(b.date||'9999')?-1:(a.date||'9999')>(b.date||'9999')?1:0);
 function goalAlloc(d){ const act=[...(d.goals||[])].filter(g=>!g.done).sort(goalCmp), pool=poolOf(d), al={}; let left=pool;
   act.forEach(g=>{ const a=Math.min(left,Math.max(0,g.budget||0)); al[g.id]=a; left-=a; }); return {act,al,pool,left}; }
@@ -256,12 +260,33 @@ const growthItem=(d,c,R)=>{
     why:gp<lo?'成長型比例低於你選的偏好區間，長期資產成長可能較慢；但是否要調整，取決於年齡、投資年限與你能承受的波動。':gp>hi?'成長型比例高於你選的偏好區間，市場大跌時資產波動會比較大，也要留意是否過度集中。':'目前比例落在你選的偏好區間內。',
     act:gp<lo?'不用一次到位：可用小額定期定額逐步調整，或先確認緊急預備金已足夠；若你的實際風險承受度更高，請在上方更改風險偏好。':gp>hi?'檢視是否能承受單年 -30% 的波動；若不能，可把新增資金改投入防禦型資產，或到上方調整風險偏好。':'定期（例如每半年）檢視一次，偏離太多時用新增資金調整即可。'+(conc?' 也可考慮分散到其他市場。':'')};
 };
+// 帳戶優化：來源＝利率偏低、沒標緊急預備金的活存；目的＝其他帳戶「活存」中利率較高、優惠沒過期、而且還沒到上限的帳戶（定存不當目的：鎖定、不能隨時轉入）
+// 轉入金額 = min(可移動金額, 目的帳戶剩餘額度)；年多賺 = 轉入金額 ×（目的利率 − 來源利率）
+function moveAdvice(d,c,f,R){
+  const demR=a=>(a.m&&a.m.demand&&a.m.demand.rate)||0, today=new Date().toISOString().slice(0,10);
+  const valid=a=>{ const e=a.m&&a.m.demand&&a.m.demand.exp; return !e||e>=today; };   // 優惠到期日已過 → 不再當作有效高利
+  const keep=Math.max(0,f.ess*R.efM-c.ef), srcs=d.accounts.filter(a=>demR(a)<DEAD_RATE&&!(a.m&&a.m.demand&&a.m.demand.ef)&&(a.demand||0)>0);
+  let pick=null, higher=0, full=0;
+  srcs.forEach(s=>{ const mvAmt=Math.max(0,s.demand-keep);
+    d.accounts.forEach(t=>{ if(t.id===s.id||demR(t)<=demR(s)||!valid(t)) return; higher++;
+      const cap=(t.m.demand.cap)||0, room=cap>0?Math.max(0,cap-(t.demand||0)):null;
+      if(room!==null&&room<=0){ full++; return; }
+      const amt=Math.min(mvAmt,room==null?Infinity:room); if(amt<=0) return;
+      const gain=amt*(demR(t)-demR(s))/100;
+      if(!pick||gain>pick.gain) pick={from:s,to:t,amt,gain,src:s.demand,rs:demR(s),rt:demR(t),cap,cur:t.demand||0,room,keep}; }); });
+  if(pick) return {pick};
+  if(c.ef<=0&&!srcs.length&&!d.accounts.some(a=>(a.demand||0)>0)) return {sum:'先建立銀行帳戶',basis:'目前沒有活存資料',why:'有活存資料才能比較各帳戶利率。',act:'到「資產細節」新增銀行帳戶並填入利率。'};
+  if(!srcs.length) return {sum:c.ef<=0?'先標記緊急預備金':'沒有需要搬移的低利活存',basis:c.ef<=0?'尚未標記緊急預備金':`沒有「利率低於 ${DEAD_RATE}%、又不是預備金」的活存`,why:c.ef<=0?'標記後才能分辨哪些錢必須留在隨時可用的帳戶。':'低利率的活存都已標記為緊急預備金，或本來就沒有閒置。',act:c.ef<=0?'在銀行帳戶展開後勾選「緊急預備金」。':'維持現狀，定期比較各帳戶利率即可。'};
+  if(higher>0&&full>=higher) return {sum:'較高利率的活存都已達上限',basis:`有 ${higher} 個利率較高的活存帳戶，但存款都已達上限金額`,why:'超過上限的金額通常只拿很低的利息，繼續轉進去沒有幫助。',act:'可評估定存、其他銀行的高利活存，或投資；原本的低利活存先留著即可。'};
+  if(higher>0) return {sum:'可搬移金額為 0',basis:'扣掉預備金需求後，沒有多出來可搬的活存',why:'預備金要放在隨時可用的帳戶。',act:'先補足緊急預備金，之後再評估搬移。'};
+  return {sum:'補上各帳戶利率才能比較',basis:'沒有利率比來源帳戶更高、且優惠未過期的活存帳戶',why:'各帳戶利率若未填寫，就無法比較哪個最划算；優惠到期日已過的帳戶不會被建議。',act:'到各帳戶補上利率或更新到期日，就能比較差異。'};
+}
 function diagHome(d,c,f){
   const R=riskOf(d), out=[], tot=c.total||1, cfg=f.cfg;
   const dp=c.dead/tot*100;   // 1 閒置資金
   out.push({t:'閒置資金（死水資產）',s:dp>R.dead?'warn':'good',sum:c.dead<=0?'沒有閒置資金':dp>R.dead?(c.dead-(c.ef||0)>0?`約 ${fmt(c.dead-(c.ef||0))} 可轉高利活存或定存`:'死水資產偏多，先確認哪些是預備金'):'比例正常，定期比較各帳戶利率',basis:`死水資產 ${fmt(c.dead)}，佔總資產 ${dp.toFixed(0)}%（${R.l}參考上限 ${R.dead}%）`,
     why:`活存利率低於 ${DEAD_RATE}%，在通膨約 ${cfg.infl}% 的假設下，放著不動購買力會逐年縮水。`,
-    act:c.dead<=0?'目前沒有需要處理的閒置資金。':dp>R.dead?`先確認哪些是緊急預備金或短期要用的錢，其餘約 ${fmt(Math.max(0,c.dead-(c.ef||0)))} 可轉到高利活存或定存。`:'維持現狀，定期比較各帳戶利率即可。'});
+    act:c.dead<=0?'目前沒有需要處理的閒置資金。':dp>R.dead?`先確認哪些是緊急預備金或短期要用的錢，其餘約 ${fmt(Math.max(0,c.dead-(c.ef||0)))} ${moveAdvice(d,c,f,R).pick?'可轉到高利活存（見「帳戶優化」）或定存':'可評估定存、其他銀行的高利活存或投資（現有高利活存沒有剩餘額度）'}。`:'維持現狀，定期比較各帳戶利率即可。'});
   const base=c.ef>0?c.ef:c.demand+c.hy, mo=f.ess>0?base/f.ess:null;   // 2 緊急預備金
   if(mo==null) out.push({t:'緊急預備金',s:'info',sum:'先到現金分配填必要開銷',basis:'尚未設定每月必要開銷',why:'沒有必要開銷就無法換算預備金可以支撐幾個月。',act:'到「資產細節」的現金分配，在「必要開銷」填入子項目。'});
   else out.push({t:'緊急預備金',s:mo<R.efM?'warn':'good',sum:mo<R.efM?`約 ${mo.toFixed(1)} 個月，再補 ${fmt(R.efM*f.ess-base)}`:mo>R.efM*2?`約 ${mo.toFixed(1)} 個月，多出 ${fmt(base-R.efM*f.ess)} 可評估投資`:`約 ${mo.toFixed(1)} 個月，足夠`,basis:`${c.ef>0?'已標記的緊急預備金':'活存（尚未標記緊急預備金）'} ${fmt(base)} ÷ 每月必要開銷 ${fmt(f.ess)} = ${mo.toFixed(1)} 個月（${R.l}參考下限 ${R.efM} 個月）`,
@@ -289,17 +314,19 @@ function diagDetail(d,c,f){   // 每次畫面更新都依資產細節（現金�
     why:bal<0?'分配超過可支配金額，實際會用到存款或信用額度。':'沒有分配的餘額最容易不知不覺花掉；投資比例沒有通用標準，取決於你的目標與年限。',
     act:bal<0?'調降「選擇消費」或其他子項目，直到分配不超過固定分配。':bal>0?`把剩餘 ${fmt(bal)} 指定用途（自動轉帳到投資理財／未來基金，或補預備金）；想知道投多少合適，可在 FIRE 模擬器試算。`:'分配完整；定期檢視是否符合目標。'});
   out.push(growthItem(d,c,R));
-  const rate=a=>Math.max(...AT.map(([k])=>(a.m&&a.m[k]&&a.m[k].rate)||0));
-  const best=[...d.accounts].sort((x,y)=>rate(y)-rate(x))[0];
-  const cand=[...d.accounts].map(a=>({a,v:(a.m&&a.m.demand&&a.m.demand.rate<DEAD_RATE&&!a.m.demand.ef)?a.demand:0})).sort((x,y)=>y.v-x.v)[0];
-  const keep=Math.max(0,f.ess*R.efM-c.ef), mv=cand?Math.max(0,cand.v-keep):0;
-  if(cand&&best&&mv>0&&rate(best)>0) out.push({t:'帳戶優化',s:'info',sum:`轉 ${fmt(mv)} 到 ${best.name}，年多約 ${fmt(mv*rate(best)/100)}`,basis:`${cand.a.name} 活存 ${fmt(cand.v)}（利率低於 ${DEAD_RATE}%）；利率最高的是 ${best.name}（${rate(best)}%）`,why:`活存幾乎沒有利息；先保留預備金所需（依${R.l}約 ${R.efM} 個月），多的才適合搬去較高利率的帳戶。`,act:`保留 ${fmt(keep)}，其餘 ${fmt(mv)} 轉到 ${best.name}，每年約多 ${fmt(mv*rate(best)/100)} 利息（請先確認該帳戶的額度與提領限制）。`});
-  else out.push({t:'帳戶優化',s:'info',sum:c.ef<=0?'先標記緊急預備金':'補上各帳戶利率才能比較',basis:c.ef<=0?'尚未標記緊急預備金':'活存配置沒有明顯可搬移的閒置資金',why:c.ef<=0?'標記後才能分辨哪些錢必須留在隨時可用的帳戶。':'各帳戶利率若未填寫，就無法比較哪個最划算。',act:c.ef<=0?'在銀行帳戶展開後勾選「緊急預備金」。':'到各帳戶補上利率，就能比較差異。'});
+  { const mv=moveAdvice(d,c,f,R);   // 4 帳戶優化：只建議「還有空間」的較高利活存，已達上限的帳戶不會被建議
+    if(mv.pick){ const p=mv.pick;
+      out.push({t:'帳戶優化',s:'info',sum:`轉 ${fmt(p.amt)} 到 ${p.to.name}，年多約 ${fmt(p.gain)}`,basis:`${p.from.name} 活存 ${fmt(p.src)}（利率 ${p.rs}%）；${p.to.name} 活存利率 ${p.rt}%，${p.room==null?'沒有設定上限':`上限 ${fmt(p.cap)}、目前 ${fmt(p.cur)}，還能放 ${fmt(p.room)}`}`,
+        why:'活存利率差距就是可多賺的利息；先保留預備金所需（依'+R.l+'約 '+R.efM+' 個月），多的才適合搬到較高利率的帳戶，而且只算到該帳戶的上限。',
+        act:`保留 ${fmt(p.keep)}，其餘最多 ${fmt(p.amt)} 轉到 ${p.to.name}（只轉到上限為止），每年約多 ${fmt(p.gain)} 利息；請先確認該帳戶的提領限制。`}); }
+    else out.push({t:'帳戶優化',s:'info',sum:mv.sum,basis:mv.basis,why:mv.why,act:mv.act}); }
   const soon=[], now=Date.now();
   d.accounts.forEach(a=>AT.forEach(([k,l])=>{const e=a.m&&a.m[k]&&a.m[k].exp; if(e&&a[k]>0){const dd=(new Date(e.replace(/-/g,'/'))-now)/86400000; if(dd<=90&&dd>=-7) soon.push(`${a.name}${l}（${fmtDate(e)}）`);}}));
+  const gone=[]; d.accounts.forEach(a=>AT.forEach(([k,l])=>{const e=a.m&&a.m[k]&&a.m[k].exp; if(e&&a[k]>0&&expDays(e)<-7) gone.push(`${a.name}${l}（${fmtDate(e)}）`);}));
+  if(gone.length) out.push({t:'存款到期日已過',s:'warn',sum:`${gone.length} 項到期日已過，請更新利率或日期`,basis:`${gone.join('、')} 已超過到期日`,why:'到期後可能自動續存、轉活存或利率改變；系統仍照原利率計算利息，數字可能與實際不符。',act:'確認實際利率後，到銀行帳戶更新利率與到期日（沒有到期日可以清空）。'});
   if(soon.length) out.push({t:'存款即將到期',s:'warn',sum:'90 天內到期，先比較續存利率',basis:`${soon.join('、')} 在 90 天內到期`,why:'到期後多半自動轉成活存或以牌告利率續存，利率可能下降。',act:'現在就比較各銀行的續存利率，決定續存、轉存或提領。'});
   { const cfgG=f.cfg, depR=depRateAll(d,c,cfgG), gi=goalInfo(d,cfgG,depR).info, act=(d.goals||[]).filter(g=>!g.done), msgs=[]; let lack=false;   // 未來目標：到期、放置方式、預估是否足夠、出金帳戶
-    const pay=(d.accounts||[]).find(a=>a.id===d.fundPayAcct);
+    const pays=payAccts(d), pay=pays.length?{name:pays.map(a=>a.name).join('、'),demand:sumBy(pays,a=>a.demand||0)}:null;
     act.forEach(g=>{ const i=gi[g.id]; if(!i) return; const m=i.m;
       if(i.st==='due'){ lack=true; msgs.unshift(`「${g.name}」已到期，請確認是否已支付（點該項目的狀態即可支付）`); }
       if(g.est&&m!=null&&m<=12) msgs.push(`「${g.name}」的日期是估計的（約 ${g.date.slice(0,7).replace('-','/')}），快到了，請確認實際使用時間`);
@@ -316,7 +343,7 @@ function diagDetail(d,c,f){   // 每次畫面更新都依資產細節（現金�
   if(bs.length){ const b=[...bs].sort((x,y)=>((x.month-nm+12)%12)-((y.month-nm+12)%12))[0],nj=b.inj||[];
     out.push({t:'不定期獎金',s:'info',sum:nj.length?'已設定注入比例':'尚未設定注入比例，不計入試算',basis:`預期下一筆${b.name?`「${b.name}」`:''} ${b.month} 月 ${fmt(b.amt)}（實際金額每年不同）`,why:nj.length?'你已設定獎金的注入比例，會自動計入 FIRE 與未來基金的試算。':'尚未設定注入比例，獎金不會計入試算。',act:nj.length?`依設定注入 ${nj.map(i=>`${i.cat||'未選分類'} ${i.ratio||0}%`).join('、')}，其餘留作預備金或獎勵自己。`:'在獎金「編輯」設定要注入哪些分類與比例；也可先補足緊急預備金，再決定投入比例。'}); }
   else out.push({t:'不定期獎金',s:'info',sum:'尚未設定獎金（沒有也可以略過）',basis:'尚未設定',why:'獎金是加速達成目標的重要來源，但需要先決定用途。',act:'在現金分配的「不定期獎金」按編輯新增。'});
-  return out.slice(0,6);
+  return out.slice(0,7);
 }
 const r2=x=>Math.round(x*100)/100;
 const money=x=>'$'+Math.round(x).toLocaleString('en-US');
@@ -571,7 +598,9 @@ function NumBox({value,onChange,className='w-32 h-9 px-3 text-sm',autoFocus,dec}
 const Num=({label,value,onChange,dec})=>(<label className="flex items-center justify-between gap-3 py-1.5 text-sm"><span className="flex-1 min-w-0 truncate">{label}</span><NumBox value={value} onChange={onChange} dec={dec}/></label>);
 const Txt=({value,onChange,ph,className=''})=><input value={value} placeholder={ph} onChange={e=>onChange(e.target.value)} className={`h-9 rounded-lg border border-neutral-200 px-3 text-sm bg-white min-w-0 ${className}`}/>;
 const Btn=({onClick,danger,gray,red,green,label,children})=><button onClick={onClick} aria-label={label} title={label} className={`px-3 h-8 rounded-lg border text-xs font-medium shrink-0 ${red?'bg-red-500 border-red-500 text-white':green?'bg-green-600 border-green-600 text-white':gray?'bg-neutral-200 border-neutral-200':'bg-white border-neutral-200'} ${danger&&!red?'text-red-600':''}`}>{children}</button>;
-const BI=({n,label,s=16,onClick,danger})=><button onClick={onClick} aria-label={label} title={label} className={`px-1.5 h-8 shrink-0 inline-flex items-center justify-center ${danger?'text-red-600':'text-zinc-600'}`}><Ic n={n} s={s}/></button>;   // 圖示按鈕（無文字，保留 aria-label）
+const BI=({n,label,s=16,onClick,danger})=><button onClick={onClick} aria-label={label} title={label} className={`px-1.5 h-8 shrink-0 inline-flex items-center justify-center ${danger?'text-red-600':n==='circle-check'?'text-green-600':'text-zinc-600'}`}><Ic n={n} s={s}/></button>;   // 圖示按鈕（無文字，保留 aria-label）
+const InfoI=({on,onClick,label})=><button type="button" aria-label={label} onClick={onClick} className={`w-3.5 h-3.5 rounded-full border text-[8px] shrink-0 leading-none ${on?'bg-black text-white border-black':'border-neutral-300 text-zinc-500'}`}>i</button>;   // ⓘ 說明按鈕（同 FIRE 倒數計時）
+const Bullets=({items})=><div className="flex flex-col gap-1">{items.map((t,i)=><div key={i} className="flex gap-1.5 text-[11px] text-zinc-500 leading-4"><span className="shrink-0">•</span><span className="min-w-0 whitespace-normal">{t}</span></div>)}</div>;
 const Row=({l,v})=><div className="flex items-center justify-between py-1.5 text-sm"><span>{l}</span><span className="text-zinc-600">{fmt(v)}</span></div>;
 function Sheet({title,icon,onClose,children}) {
   return (<div className="fixed inset-0 z-40 bg-black/30 flex items-end justify-center px-3" style={{paddingBottom:'calc(38px + env(safe-area-inset-bottom,0px))'}} onClick={onClose}>
@@ -726,7 +755,7 @@ function RecSheet({d,setD,onClose}) {
 }
 function PageMy({d,setD,fund,c,mom}) {
   const mp=v=>v==null?'資料不足':fmtPct(v);
-  const [rec,setRec]=useState(false), [tip,setTip]=useState(null), [sheet,setSheet]=useState(null), [yrSel,setYrSel]=useState(null), [fEdit,setFEdit]=useState(false);
+  const [rec,setRec]=useState(false), [tip,setTip]=useState(null), [sheet,setSheet]=useState(null), [yrSel,setYrSel]=useState(null), [fEdit,setFEdit]=useState(false), [fInfo,setFInfo]=useState(false), [fInfoA,setFInfoA]=useState(false);
   const pct=v=>c.total>0?(v/c.total*100).toFixed(1)+'%':'—', f=fireCalc(d,c);
   const cards=[['總資產',fmt(c.total),null,'較上月 '+mp(mom.total),null],
     ['現金',fmt(c.cash),pct(c.cash),mp(mom.cash),'cash'],
@@ -801,10 +830,18 @@ function PageMy({d,setD,fund,c,mom}) {
     </Sheet>}
     {sheet==='fire'&&(()=>{ const cf=f.cfg, A=f.assets, setF=patch=>setD(p=>({...p,fire:{...(p.fire||{}),...patch}})); const cv={demand:c.demand+c.hy,td:c.td,us:c.us,tw:c.tw};
       const fundSaved=poolOf(d), useShort=cf.exShort!=null?cf.exShort:(cf.shortAmt||0)>0;
-      const depOn=!!(cf.inc.demand||cf.inc.td);
+      const depOn=!!(cf.inc.demand||cf.inc.td), nPts=((f.gp||{parts:[]}).parts||[]).length;
       const Ex=({on,onChange,label,right})=><label className={`flex items-center justify-between gap-2 py-1.5 text-sm ${depOn?'':'opacity-40'}`}><span className="flex items-center gap-2"><input type="checkbox" className="accent-red-500" disabled={!depOn} checked={!!on&&depOn} onChange={e=>onChange(e.target.checked)}/>{label}</span>{right}</label>;
       return <Sheet title="FIRE 設定" onClose={()=>{setSheet(null);setFEdit(false);}}>
-      <div className="text-xs text-zinc-500 whitespace-normal leading-5 mb-2">FIRE 目標 = 年支出 ÷ 安全提領率，以今日幣值計算。報酬以實質年化報酬率複利；每月投入與年獎金視為固定名目金額，會依通膨折算成今日幣值後才加入；模擬假設：年獎金平均分攤到每個月（未來目標的提撥則依獎金實際入帳月計算）。基本只算必要開銷；理想預設為必要開銷＋選擇消費（娛樂、旅遊等），可自行改每月金額；退休後仍持續的收入會先從年支出扣掉。</div>
+      <div className="flex items-center gap-1.5 mb-1"><span className="text-sm font-semibold">FIRE 說明</span><InfoI on={fInfo} label="FIRE 設定說明" onClick={()=>setFInfo(v=>!v)}/></div>
+      {fInfo&&<div className="mb-3 p-2.5 rounded-lg bg-neutral-50"><Bullets items={[
+        'FIRE 目標 = (年支出 − 退休後持續收入) ÷ 安全提領率，以今日幣值計算。',
+        '報酬以實質年化報酬率複利；每月投入與年獎金視為固定名目金額，會依通膨折算成今日幣值後才加入。',
+        '模擬假設年獎金平均分攤到每個月（未來目標的提撥則依獎金實際入帳月計算）。',
+        '基本只算必要開銷；理想預設為必要開銷＋選擇消費（娛樂、旅遊等），可自行改每月金額。',
+        '退休後每月其他收入：在現金分配的「收入項目」設定，標示「退休後仍持續」的才會從年支出扣掉。',
+        ...(nPts?[`未來目標：有預計使用時間的 ${nPts} 個目標會參與試算，未來基金依優先級、日期分配。`,'到期前資金依「現金／投資」複利成長，到期月份扣除預算。','FIRE 達成時，尚未支付的目標預算也要能付得起。']:['未來目標：目前沒有填預計使用時間的目標，未來基金全數暫時排除（到「未來目標」編輯項目填預計使用時間）。'])
+      ]}/></div>}
       <div className="flex items-center justify-between mt-1"><div className="text-sm font-semibold">情境</div><BI n={fEdit?'circle-check':'pen-line'} label={fEdit?'完成':'編輯'} onClick={()=>setFEdit(v=>!v)}/></div>
       <div className="flex gap-2 mt-1.5">{SCEN.map(([k,l])=><Btn key={k} gray={f.scen===k} onClick={()=>setF({scen:k})}>{l}</Btn>)}</div>
       <div className="mt-2 border border-neutral-200 rounded-lg overflow-hidden text-xs">
@@ -812,32 +849,32 @@ function PageMy({d,setD,fund,c,mom}) {
         {SCEN.map(([k,l])=><div key={k} className={`grid grid-cols-[3.2em_1fr_1fr_1fr] gap-1 px-2 py-1.5 border-t-[0.5px] border-neutral-200 ${f.scen===k?'font-semibold':''}`}><span>{l}</span><span className="text-right">{f.sc[k].bn.toFixed(1)}%</span><span className="text-right">{f.sc[k].br.toFixed(1)}%</span><span className="text-right truncate">{fireWhen(f.sc[k].real,d).replace(/（.*）/,'')}</span></div>)}
       </div>
       <div className="text-[11px] text-zinc-400 whitespace-normal leading-4 mt-1">表格為整體加權報酬。存款加權利率 {A.depRate.toFixed(1)}%（取自銀行帳戶利率）{A.noRate>0?`；有 ${fmt(A.noRate)} 未填利率，視為 0%`:''}。</div>
-      {fEdit&&<>
-        <div className="text-sm font-semibold mt-4">報酬率與假設</div>
-        <Num label="保守 股票年化報酬率 %（名目）" value={cf.cons} dec={1} onChange={v=>setF({cons:v})}/>
-        <Num label="中性 股票年化報酬率 %（名目）" value={cf.mid} dec={1} onChange={v=>setD(p=>({...p,fireRet:v}))}/>
-        <Num label="樂觀 股票年化報酬率 %（名目）" value={cf.opt} dec={1} onChange={v=>setF({opt:v})}/>
-        <Num label="通膨率 % / 年" value={cf.infl} dec={1} onChange={v=>setF({infl:v})}/>
-        <Num label="投資成本 % / 年（基金費用、交易成本）" value={cf.cost} dec={2} onChange={v=>setF({cost:v})}/>
-        <Num label="稅費 %（佔投資獲利的比例）" value={cf.tax} dec={1} onChange={v=>setF({tax:v})}/>
-        <Num label="安全提領率 %" value={cf.swr} dec={1} onChange={v=>setF({swr:v})}/>
-        <div className="text-[11px] text-zinc-400 whitespace-normal leading-4 mt-1">股票實質報酬 =（名目報酬 − 投資成本，獲利部分再扣稅費）後扣除通膨；存款直接用帳戶利率再扣通膨（不扣成本，利息稅未計）。以上都是假設值，請依自己的投資內容與稅務情況調整；實際報酬不保證。</div>
-      </>}
+      {fEdit&&<div className="mt-4 rounded-xl bg-neutral-100 p-3" aria-label="報酬率與假設">
+        <div className="flex items-center gap-1.5"><span className="text-sm font-semibold">報酬率與假設(年)</span><InfoI on={fInfoA} label="報酬率與假設說明" onClick={()=>setFInfoA(v=>!v)}/></div>
+        {fInfoA&&<div className="mt-1.5 mb-1 p-2.5 rounded-lg bg-white"><Bullets items={[
+          '股票報酬率為名目年化報酬，保守／中性／樂觀三種情境各自設定。',
+          '股票實質報酬 =（名目報酬 − 投資成本，獲利部分再扣稅費）後扣除通膨。',
+          '投資成本：基金費用、交易成本，每年佔投資的比例（%）。稅費：佔投資獲利的比例（%）。',
+          '安全提領率：退休後每年可從資產提領的比例（%）。',
+          '存款直接用帳戶利率再扣通膨（不扣成本，利息稅未計）。',
+          '以上都是假設值，請依自己的投資內容與稅務情況調整；實際報酬不保證。']}/></div>}
+        <Num label="保守股票報酬率" value={cf.cons} dec={1} onChange={v=>setF({cons:v})}/>
+        <Num label="中性股票報酬率" value={cf.mid} dec={1} onChange={v=>setD(p=>({...p,fireRet:v}))}/>
+        <Num label="樂觀股票報酬率" value={cf.opt} dec={1} onChange={v=>setF({opt:v})}/>
+        <Num label="通膨率" value={cf.infl} dec={1} onChange={v=>setF({infl:v})}/>
+        <Num label="投資成本" value={cf.cost} dec={2} onChange={v=>setF({cost:v})}/>
+        <Num label="稅費" value={cf.tax} dec={1} onChange={v=>setF({tax:v})}/>
+        <Num label="安全提領率" value={cf.swr} dec={1} onChange={v=>setF({swr:v})}/>
+      </div>}
       <div className="text-sm font-semibold mt-4">退休後每月支出</div>
       <Row l="基本 每月（必要開銷）" v={f.ess}/>
-      <Num label="理想 每月金額" value={Math.round(f.realYear/12)} onChange={v=>setF({realYear:v*12})}/>
-      <div className="mt-1"><Btn onClick={()=>setF({realYear:null})}>理想 每月金額還原預設</Btn></div>
+      <div className="flex items-center justify-between gap-3 py-0.5 text-sm"><span className="flex-1 min-w-0 flex items-center gap-0.5"><span className="truncate">理想 每月金額</span><BI n="rotate-ccw" label="理想 每月金額還原預設" onClick={()=>setF({realYear:null})}/></span><NumBox value={Math.round(f.realYear/12)} onChange={v=>setF({realYear:v*12})}/></div>
       <Row l="退休後每月其他收入（收入項目）" v={f.retInc}/>
-      <div className="text-[11px] text-zinc-400 whitespace-normal leading-4">「理想」預設 = 必要開銷＋選擇消費；想要不同水準可直接改上面的金額。其他收入在現金分配的「收入項目」設定，標示「退休後仍持續」的才會從目標扣掉。</div>
       <div className="text-sm font-semibold mt-4">每年投入</div>
       <Row l="每月投入 × 12（投資理財）" v={f.monthly*12}/>
       <Row l={cf.noBonus?'獎金注入（已排除）':'預期獎金注入'} v={cf.noBonus?0:f.byAll}/>
       <label className="flex items-center gap-2 py-1.5 text-sm"><input type="checkbox" checked={!!cf.noBonus} onChange={e=>setF({noBonus:e.target.checked})}/>不含獎金（例如換工作後沒有獎金）</label>
       {f.free&&<div className="text-[11px] text-zinc-500 whitespace-normal leading-4 mt-1">年薪{cf.noBonus?'（不含獎金）':''}扣掉已分配後，尚有 {fmt(f.free.y)}／年未分配，未計入上面的試算。若全數投入，理想目標{f.free.m1==null?'仍無法達成':f.free.m0==null?`可在 ${fmtDur(f.free.m1)} 後達成`:f.free.m0>f.free.m1?`約可提早 ${fmtDur(f.free.m0-f.free.m1)}`:'提早不到 1 個月'}。要算進去，請先到現金分配把它指定用途。</div>}
-      <div className="text-sm font-semibold mt-4">未來目標與 FIRE</div>
-      {(()=>{ const gp=f.gp||{parts:[],exSaved:0}, pts=gp.parts; return <>
-        <div className="text-[11px] text-zinc-500 whitespace-normal leading-4">{pts.length?`有預計使用時間的 ${pts.length} 個目標會參與試算：未來基金依優先級、日期分配，到期前資金依「現金／投資」複利成長，到期月份扣除預算；FIRE 達成時，尚未支付的目標預算也要能付得起。`:'目前沒有填預計使用時間的目標，未來基金全數暫時排除（到「未來目標」編輯項目填預計使用時間）。'}</div>
-</>; })()}
       <div className="text-sm font-semibold mt-4">計入 FIRE 的資產</div>
       {FIRE_ASSETS.map(([k,l])=><label key={k} className="flex items-center justify-between gap-2 py-1.5 text-sm"><span className="flex items-center gap-2"><input type="checkbox" checked={!!cf.inc[k]} onChange={e=>setF({inc:{...cf.inc,[k]:e.target.checked}})}/>{l}</span><span className="text-zinc-600">{fmt(cv[k])}</span></label>)}
       <div className="border-t-[0.5px] border-neutral-300 my-3"/>
@@ -985,7 +1022,7 @@ function PageDetail({d,setD,c}) {
   const setM=(id,k,patch)=>setD(p=>({...p,accounts:p.accounts.map(a=>a.id===id?{...a,m:{...a.m,[k]:{...a.m[k],...patch}}}:a)}));
   const accRefs=(p,id)=>{ const r=[];   // 找出還在使用這個帳戶 ID 的資料（歷史交易要能回沖，不能讓帳戶消失）
     const nt=sumBy(p.holdings||[],h=>h.trades.filter(t=>t.acct===id).length); if(nt) r.push(`${nt} 筆股票交易（買進／賣出／股息）曾動用這個帳戶，刪除後無法回沖`);
-    if(p.fundPayAcct===id) r.push('未來基金出金帳戶');
+    if(payIds(p).includes(id)) r.push('未來基金出金帳戶');
     return r; };
   const delAcc=a=>{ const refs=accRefs(d,a.id);
     if(refs.length){ alert(`無法刪除「${a.name}」，仍有資料使用它：\n・${refs.join('\n・')}\n\n請先改用其他帳戶或取消設定（未來基金出金帳戶到其他帳戶指定）；股票交易紀錄為歷史資料，請保留帳戶，可把餘額轉走後改名為「已停用」。`); return; }
@@ -1052,17 +1089,17 @@ function PageDetail({d,setD,c}) {
     <Acc title={<TT n="landmark">銀行帳戶</TT>} sub={`本月利息 ${fmt(c.mInterest)} · 預估年息 ${fmt(c.interest)}`} open={sec.bank} onToggle={()=>tsec('bank')} right={<BI n="message-circle-plus" label="新增" onClick={addAcc}/>}>
       {d.accounts.map((ac,ai)=>{const inf=acctInfo(ac);return (
         <div key={ac.id} className={ai<d.accounts.length-1?'border-b-[0.5px] border-neutral-300':''}>
-          <div className="h-14 grid grid-cols-[104px_1fr_1fr_20px] gap-2 items-center cursor-pointer" onClick={()=>tog(ac.id)}>
-            <div className="min-w-0 flex items-center gap-1"><Fit className="text-xs font-medium min-w-0">{ac.name}</Fit>{(()=>{ const tg=[[inf.tag,inf.tag==='生息'?'生':'普',inf.tag==='生息'?'bg-green-100 text-green-700':'bg-neutral-100 text-zinc-500'],...(ac.fixed>0?[['定存','定','bg-green-700 text-white']]:[]),...(d.fundPayAcct===ac.id?[['基金出金','未','bg-orange-100 text-orange-700']]:[])], one=tg.length>2;   // 超過兩個標籤時只顯示一個字
+          <div className="h-14 grid grid-cols-[128px_1fr_1fr_20px] gap-2 items-center cursor-pointer" onClick={()=>tog(ac.id)}>
+            <div className="min-w-0 flex items-center gap-1"><Fit className="text-xs font-medium min-w-0">{ac.name}</Fit>{(()=>{ const tg=[...(inf.tag?[[inf.tag,inf.tag==='生息'?'生':'普',inf.tag==='生息'?'bg-green-100 text-green-700':'bg-neutral-100 text-zinc-500']]:[]),...(ac.fixed>0?[['定存','定','bg-green-700 text-white']]:[]),...(payIds(d).includes(ac.id)?[['基金出金','未','bg-orange-100 text-orange-700']]:[])], tw=s=>[...s].reduce((w,ch)=>w+(ch.charCodeAt(0)>255?12:6.5),0), full=sumBy(tg,x=>[...x[0]].length*8+12), one=tg.length>2||tw(ac.name)+full>124;   // 名稱＋完整標籤放不下（或超過兩個標籤）→ 標籤只顯示一個字，名稱優先
         const shortCls={生:'bg-green-100 text-green-700',定:'bg-green-700 text-white',未:'bg-orange-400 text-white',普:'bg-neutral-200 text-zinc-600'};
         return tg.map(([full,ch,cls])=><span key={full} className={`text-[8px] leading-4 px-1 rounded shrink-0 ${one?shortCls[ch]:cls}`}>{one?ch:full}</span>); })()}</div>
             <Fit className="min-w-0 text-sm text-black/60">{fmt(acctTotal(ac))}</Fit>
-            <Fit className="min-w-0 text-xs text-zinc-500">息 {fmt(inf.mInterest)}</Fit>
+            <div className="min-w-0 flex items-center gap-1"><Fit className="min-w-0 text-xs text-zinc-500">息 {fmt(inf.mInterest)}</Fit>{inf.expired&&<span className="text-[8px] leading-4 px-1 rounded shrink-0 bg-red-100 text-red-600">過期</span>}</div>
             <Chev open={open[ac.id]}/>
           </div>
           {open[ac.id]&&<div className="pb-3">
             <div className="flex gap-2 items-center"><Txt value={ac.name} onChange={v=>setAcc(ac.id,{name:v})} className="flex-1"/><Btn danger onClick={()=>delAcc(ac)}>刪除</Btn></div>
-            <label className="flex items-center gap-2 mt-2 text-xs text-zinc-600"><input type="checkbox" checked={d.fundPayAcct===ac.id} onChange={e=>setD(p=>({...p,fundPayAcct:e.target.checked?ac.id:null}))}/>未來基金出金帳戶（未來基金 = 這個帳戶的活存餘額）</label>
+            <label className="flex items-center gap-2 mt-2 text-xs text-zinc-600"><input type="checkbox" checked={payIds(d).includes(ac.id)} onChange={e=>setD(p=>{const cur=payIds(p), nx=e.target.checked?[...cur.filter(x=>x!==ac.id),ac.id]:cur.filter(x=>x!==ac.id); return {...p,fundPayAccts:nx,fundPayAcct:nx[0]||null};})}/>未來基金出金帳戶（可複選；未來基金 = 勾選帳戶的活存餘額加總）</label>
             {AT.map(([k,l])=>{const m=(ac.m&&ac.m[k])||{};return (<div key={k} className="mt-2 p-2 rounded-lg bg-neutral-50">
               <div className="flex items-center justify-between"><span className="text-xs font-semibold">{l}</span>
                 <label className="flex items-center gap-1 text-[10px] text-zinc-500"><input type="checkbox" checked={!!m.ef} onChange={e=>setM(ac.id,k,{ef:e.target.checked})}/>緊急預備金</label></div>
@@ -1213,12 +1250,14 @@ function PageGoals({d,setD,fund}) {
     else setD(p=>({...p,wishlist:id?p.wishlist.map(w=>w.id===id?{...w,name,budget}:w):[...p.wishlist,{id:uid(),name,budget,done:false}]}));
     setForm(null);
   };
-  const payGoal=g=>{   // 支付：使用者按下才會動資料；從出金帳戶的活存扣掉預算（未來基金 = 該帳戶活存），並把項目標為完成
-    const ac=d.accounts.find(a=>a.id===d.fundPayAcct), bud=g.budget||0;
-    if(ac&&(ac.demand||0)<bud){ alert(`「${ac.name}」活存不足：「${g.name}」預算 ${fmt(bud)}，目前只有 ${fmt(ac.demand||0)}。\n不會標記為已支付，請先補足出金帳戶的活存，或調低項目預算。`); return; }
-    if(!confirm(ac?`是否支付「${g.name}」${fmt(bud)}？\n將從「${ac.name}」的活存扣除${g.place==='invest'?'（投資項目請先把賣出持股的錢轉入這個帳戶；持股不會自動變動）':''}。`:`是否支付「${g.name}」？\n尚未指定出金帳戶，不會扣除任何帳戶餘額。`)) return;
-    setD(p=>{ const a2=p.accounts.find(a=>a.id===p.fundPayAcct); if(a2&&(a2.demand||0)<bud) return p;   // 以最新資料再檢查一次：不足就不動任何資料
-      return {...p,accounts:p.fundPayAcct?p.accounts.map(a=>a.id===p.fundPayAcct?{...a,demand:r2((a.demand||0)-bud)}:a):p.accounts,goals:p.goals.map(x=>x.id===g.id?{...x,done:true,paidAt:todayISO(),paid:bud}:x)}; });
+  const payGoal=g=>{   // 支付：使用者按下才會動資料；依勾選順序從出金帳戶的活存扣掉預算（未來基金 = 這些帳戶活存加總），並把項目標為完成
+    const acs=payAccts(d), bud=g.budget||0, have=sumBy(acs,a=>Math.max(0,a.demand||0));
+    if(acs.length&&have<bud){ alert(`${acs.length>1?`出金帳戶（${acs.map(a=>a.name).join('、')}）活存合計`:`「${acs[0].name}」活存`}不足：「${g.name}」預算 ${fmt(bud)}，目前只有 ${fmt(have)}。\n不會標記為已支付，請先補足出金帳戶的活存，或調低項目預算。`); return; }
+    if(!confirm(acs.length?`是否支付「${g.name}」${fmt(bud)}？\n將依序從「${acs.map(a=>a.name).join('、')}」的活存扣除${g.place==='invest'?'（投資項目請先把賣出持股的錢轉入出金帳戶；持股不會自動變動）':''}。`:`是否支付「${g.name}」？\n尚未指定出金帳戶，不會扣除任何帳戶餘額。`)) return;
+    setD(p=>{ const ids=payIds(p), cur=ids.map(id=>p.accounts.find(a=>a.id===id)).filter(Boolean);
+      if(cur.length&&sumBy(cur,a=>Math.max(0,a.demand||0))<bud) return p;   // 以最新資料再檢查一次：不足就不動任何資料
+      let left=bud; const take={}; cur.forEach(a=>{ const t=Math.min(left,Math.max(0,a.demand||0)); take[a.id]=t; left=r2(left-t); });
+      return {...p,accounts:p.accounts.map(a=>take[a.id]?{...a,demand:r2((a.demand||0)-take[a.id])}:a),goals:p.goals.map(x=>x.id===g.id?{...x,done:true,paidAt:todayISO(),paid:bud}:x)}; });
   };
   const delGoal=g=>{ if(confirm('刪除「'+g.name+'」？')) setD(p=>({...p,goals:p.goals.filter(x=>x.id!==g.id)})); };
   const toggleWish=id=>setD(p=>({...p,wishlist:p.wishlist.map(w=>w.id===id?{...w,done:!w.done}:w)}));
@@ -1229,7 +1268,7 @@ function PageGoals({d,setD,fund}) {
   const remaining=Math.max(0,fund.target-fund.saved);
   const eta=mths==null?'—':mths===0?'已達成':(()=>{const dt=addMonths(mths);return `${dt.getFullYear()}/${pad(dt.getMonth()+1)}`;})();
   const etaSub=mths>0?`距離現在還有 ${fmtDur(mths)}`:null;
-  const cfgG=fireCfg(d), ccG=calcAssets(d), depR=depRateAll(d,ccG,cfgG), GI=goalInfo(d,cfgG,depR).info, payAc=d.accounts.find(a=>a.id===d.fundPayAcct);
+  const cfgG=fireCfg(d), ccG=calcAssets(d), depR=depRateAll(d,ccG,cfgG), GI=goalInfo(d,cfgG,depR).info, payAcs=payAccts(d);
   const stOf=g=>{ if(g.done) return ['已完成','text-zinc-400']; const i=GI[g.id]||{}; return i.st==='ready'?['✓ 現在已可達成','text-green-600']:i.st==='onTrack'?['到期前可達成','text-blue-600']:i.st==='short'?[`⚠ 缺 ${fmt(i.lack)}`,'text-red-600']:i.st==='due'?['已到期・待支付','text-amber-600']:['未填日期','text-zinc-400']; };
   const subOf=g=>{ if(g.done) return `${(g.paidAt||'').slice(0,10).replace(/-/g,'/')} 已支付`; const i=GI[g.id]||{}, pl=i.place==='invest'?'投資':'現金';
     if(!g.date) return `${pl}・暫不參與 FIRE`; const m=goalMonths(g); return `${g.est?'約 ':''}${g.date.slice(0,7).replace('-','/')}${m!=null?'・'+termLabel(m):''}・${pl}`; };
@@ -1255,8 +1294,8 @@ function PageGoals({d,setD,fund}) {
         {etaSub&&<Fit className="text-[10px] text-zinc-500 mt-0.5">{etaSub}</Fit>}
       </Card>
     </div>
-    {!payAc&&<div className="mt-2 text-[11px] text-amber-600 whitespace-normal leading-4">尚未指定未來基金出金帳戶，未來基金金額為 0。到「資產細節 → 銀行帳戶」展開帳戶，勾選「未來基金出金帳戶」，未來基金就會等於該帳戶的活存餘額。</div>}
-    {payAc&&<div className="mt-2 text-[11px] text-zinc-400 whitespace-normal leading-4">未來基金 = 「{payAc.name}」的活存餘額。</div>}
+    {!payAcs.length&&<div className="mt-2 text-[11px] text-amber-600 whitespace-normal leading-4">尚未指定未來基金出金帳戶，未來基金金額為 0。到「資產細節 → 銀行帳戶」展開帳戶，勾選「未來基金出金帳戶」（可複選），未來基金就會等於勾選帳戶的活存餘額加總。</div>}
+    {payAcs.length>0&&<div className="mt-2 text-[11px] text-zinc-400 whitespace-normal leading-4">未來基金 = {payAcs.map(a=>`「${a.name}」`).join('、')}的活存餘額{payAcs.length>1?'加總':''}。</div>}
     <div className="mt-6 flex items-center justify-between"><div className="text-sm font-semibold"><TT n="piggy-bank">未來基金項目</TT></div><BI n="message-circle-plus" label="新增項目" onClick={()=>openForm('goal')}/></div>
     <div className="mt-1">
       <div className={`${GR} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span/><span>項目</span><span className="text-center">預算</span><span className="text-center">狀態</span></div>
@@ -1703,7 +1742,7 @@ function App() {
     return ()=>{ window.removeEventListener('online',on); window.removeEventListener('offline',offl); window.removeEventListener('beforeunload',bye); };
   },[ready]);
 
-  const fund=useMemo(()=>{const target=sumBy(d.goals.filter(g=>!g.done),g=>g.budget),saved=poolOf(d);return {target,saved,rate:target?Math.min(100,saved/target*100):0};},[d.goals,d.accounts,d.fundPayAcct]);
+  const fund=useMemo(()=>{const target=sumBy(d.goals.filter(g=>!g.done),g=>g.budget),saved=poolOf(d);return {target,saved,rate:target?Math.min(100,saved/target*100):0};},[d.goals,d.accounts,d.fundPayAcct,d.fundPayAccts]);
   const calc=useMemo(()=>calcAssets(d),[d]);
   const mom=useMemo(()=>{   // 較上月成長：與上個月的紀錄比較
     const pm=prevYM(curYM()), r0=d.history.find(x=>x.ym===pm), r=r0&&r0.kind!=='now'?r0:null;   // 上個月（1 月時為去年 12 月）；只用月底定義的快照，月中記錄的不拿來比

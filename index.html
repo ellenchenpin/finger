@@ -1584,9 +1584,12 @@ function Onboard({d,setD}) {
   const body=()=>{
     if(step<ONB_IN){ const [ic,ti,sub,its]=ONB_INTRO[step]; return <div className="flex flex-col gap-4 pt-2">{step===0&&<div className="text-xl font-semibold">歡迎使用 Finger</div>}
       <div><div className="text-lg font-semibold"><TT n={ic} s={22}>{ti}</TT></div><div className="text-sm text-zinc-500 mt-0.5">{sub}</div></div>
-      {its.map(([k,name,tx])=>(<div key={k} className="flex flex-col gap-1.5"><div className="text-sm font-semibold">{name}</div>
-        <img src={ONB_IMG[k]} alt={name+'畫面示意'} className="w-full rounded-xl border border-neutral-200 block"/>
-        <p className="text-[13px] text-zinc-600 m-0 leading-5 whitespace-normal">{tx}</p></div>))}
+      {its.map(([k,name,tx],i)=>{ const num=its.length>1?i+1:null; return (<div key={k} className="flex flex-col gap-3 mt-1">
+        <div className="relative bg-neutral-900 text-white rounded-2xl px-3.5 py-3 flex gap-2.5 items-start">{num&&<span className="shrink-0 w-6 h-6 rounded-full bg-white text-neutral-900 text-sm font-bold flex items-center justify-center">{num}</span>}
+          <div className="min-w-0"><div className="text-base font-bold leading-6">{name}</div><div className="text-sm leading-[21px] text-neutral-200 mt-0.5 whitespace-normal">{tx}</div></div>
+          <i aria-hidden="true" className="absolute left-6 -bottom-2 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-neutral-900"/></div>
+        <div className="relative">{num&&<span className="absolute -left-2 -top-2 z-10 w-[26px] h-[26px] rounded-full bg-neutral-900 text-white text-sm font-bold flex items-center justify-center ring-[3px] ring-white">{num}</span>}
+          <img src={ONB_IMG[k]} alt={name+'畫面示意'} className="w-full block"/></div></div>);})}
       <p className="text-[11px] text-zinc-400 m-0 whitespace-normal">圖中為範例資料。</p></div>; }
     if(st===0) return <div className="flex flex-col gap-4">{tit(0,'基本資料')}
       <p className="text-sm text-zinc-500 m-0 leading-6 whitespace-normal">建立你的基本資料，之後主頁就有完整的數字。每一步都可以先略過，之後隨時補上。</p>

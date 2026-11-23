@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>錢錢的家</title>
+<title>Finger</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com/3.4.17"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
@@ -256,9 +256,9 @@ const growthItem=(d,c,R)=>{
   const conc=c.invest>0&&(us>80||us<20)?` 持股集中在單一市場（${Math.max(us,100-us).toFixed(0)}%）。`:'';
   if(c.total<=0) return {t:'資產配置',s:'info',sum:'先新增銀行帳戶與持股',basis:'目前沒有資產資料',why:'有資產之後才能檢視成長型、防禦型與閒置資金的比例。',act:'先到「資產細節」新增銀行帳戶與持股。'};
   const s=gp<lo?'info':gp>hi?'info':'good';
-  return {t:'資產配置',s,sum:gp<lo?'成長型偏低，可用小額定期定額逐步調整':gp>hi?'成長型偏高，留意市場大跌時的波動':'成長型比例落在偏好區間',basis:`成長型 ${gp.toFixed(0)}%、防禦型 ${dfp.toFixed(0)}%、死水 ${dp.toFixed(0)}%；你的風險偏好是${R.l}，成長型參考區間 ${lo}–${hi}%。${conc}`,
+  return {t:'資產配置',s,sum:gp<lo?'成長型偏低，可評估是否調整':gp>hi?'成長型偏高，留意市場大跌時的波動':'成長型比例落在偏好區間',basis:`成長型 ${gp.toFixed(0)}%、防禦型 ${dfp.toFixed(0)}%、死水 ${dp.toFixed(0)}%；你的風險偏好是${R.l}，成長型參考區間 ${lo}–${hi}%。${conc}`,
     why:gp<lo?'成長型比例低於你選的偏好區間，長期資產成長可能較慢；但是否要調整，取決於年齡、投資年限與你能承受的波動。':gp>hi?'成長型比例高於你選的偏好區間，市場大跌時資產波動會比較大，也要留意是否過度集中。':'目前比例落在你選的偏好區間內。',
-    act:gp<lo?'不用一次到位：可用小額定期定額逐步調整，或先確認緊急預備金已足夠；若你的實際風險承受度更高，請在上方更改風險偏好。':gp>hi?'檢視是否能承受單年 -30% 的波動；若不能，可把新增資金改投入防禦型資產，或到上方調整風險偏好。':'定期（例如每半年）檢視一次，偏離太多時用新增資金調整即可。'+(conc?' 也可考慮分散到其他市場。':'')};
+    act:gp<lo?'不必一次到位：可先確認緊急預備金已足夠，再依自己的年限與承受度決定是否調整；若你的實際風險承受度不同，可在上方更改風險偏好。':gp>hi?'檢視是否能承受單年 -30% 的波動；若不能，可評估把新增資金改投入防禦型資產，或到上方調整風險偏好。':'定期（例如每半年）檢視一次，偏離太多時用新增資金調整即可。'+(conc?' 也可考慮分散到其他市場。':'')};
 };
 // 帳戶優化：來源＝利率偏低、沒標緊急預備金的活存；目的＝其他帳戶「活存」中利率較高、優惠沒過期、而且還沒到上限的帳戶（定存不當目的：鎖定、不能隨時轉入）
 // 轉入金額 = min(可移動金額, 目的帳戶剩餘額度)；年多賺 = 轉入金額 ×（目的利率 − 來源利率）
@@ -310,9 +310,9 @@ function diagHome(d,c,f){
 function diagDetail(d,c,f){   // 每次畫面更新都依資產細節（現金分配、資產分類、帳戶、持股、獎金）重新產生，最多 5 點
   const R=riskOf(d), out=[], sal=monthInc(d), bal=sal-sumBy(d.allocation,catTotal), inv=catOf(d,'投資理財')+catOf(d,'未來基金');
   if(sal<=0) out.push({t:'現金流配置',s:'info',sum:'先填每月固定分配',basis:'尚未填入每月固定分配',why:'有固定分配金額，才能檢視每月的錢分配到哪裡。',act:'到「現金分配」填入固定分配。'});
-  else out.push({t:'現金流配置',s:bal<0?'warn':'good',sum:bal<0?`超出 ${fmt(-bal)}，調降選擇消費`:bal>0?`剩 ${fmt(bal)} 尚未指定用途`:'分配完整',basis:`固定分配 ${fmt(sal)}，已分配 ${fmt(sal-bal)}，${bal<0?`超出 ${fmt(-bal)}`:`剩餘 ${fmt(bal)}`}；投資理財＋未來基金 ${fmt(inv)}（佔 ${(inv/sal*100).toFixed(0)}%）`,
+  else out.push({t:'現金流配置',s:bal<0?'warn':'good',sum:bal<0?`超出 ${fmt(-bal)}，可檢視選擇消費`:bal>0?`剩 ${fmt(bal)} 尚未指定用途`:'分配完整',basis:`固定分配 ${fmt(sal)}，已分配 ${fmt(sal-bal)}，${bal<0?`超出 ${fmt(-bal)}`:`剩餘 ${fmt(bal)}`}；投資理財＋未來基金 ${fmt(inv)}（佔 ${(inv/sal*100).toFixed(0)}%）`,
     why:bal<0?'分配超過可支配金額，實際會用到存款或信用額度。':'沒有分配的餘額最容易不知不覺花掉；投資比例沒有通用標準，取決於你的目標與年限。',
-    act:bal<0?'調降「選擇消費」或其他子項目，直到分配不超過固定分配。':bal>0?`把剩餘 ${fmt(bal)} 指定用途（自動轉帳到投資理財／未來基金，或補預備金）；想知道投多少合適，可在 FIRE 模擬器試算。`:'分配完整；定期檢視是否符合目標。'});
+    act:bal<0?'可檢視「選擇消費」或其他子項目，讓分配不超過固定分配。':bal>0?`把剩餘 ${fmt(bal)} 指定用途（自動轉帳到投資理財／未來基金，或補預備金）；想知道投多少合適，可在 FIRE 模擬器試算。`:'分配完整；定期檢視是否符合目標。'});
   out.push(growthItem(d,c,R));
   { const mv=moveAdvice(d,c,f,R);   // 4 帳戶優化：只建議「還有空間」的較高利活存，已達上限的帳戶不會被建議
     if(mv.pick){ const p=mv.pick;
@@ -331,8 +331,8 @@ function diagDetail(d,c,f){   // 每次畫面更新都依資產細節（現金�
       if(i.st==='due'){ lack=true; msgs.unshift(`「${g.name}」已到期，請確認是否已支付（點該項目的狀態即可支付）`); }
       if(g.est&&m!=null&&m<=12) msgs.push(`「${g.name}」的日期是估計的（約 ${g.date.slice(0,7).replace('-','/')}），快到了，請確認實際使用時間`);
       if(i.st==='short'){ lack=true; msgs.push(`「${g.name}」依目前分配與保守估算，到期預估缺約 ${fmt(i.lack)}`); }
-      if(m!=null&&i.place==='cash'&&m>=60) msgs.push(`「${g.name}」還有約 ${Math.floor(m/12)} 年才會用，卻放在現金，可考慮改投資`);
-      if(m!=null&&i.place==='invest'&&m<=24) msgs.push(`「${g.name}」${m} 個月內要用，建議逐步換回現金，避免下跌時不夠`); });
+      if(m!=null&&i.place==='cash'&&m>=60) msgs.push(`「${g.name}」還有約 ${Math.floor(m/12)} 年才會用，卻放在現金，可評估是否改為投資`);
+      if(m!=null&&i.place==='invest'&&m<=24) msgs.push(`「${g.name}」${m} 個月內要用，可評估逐步換回現金，降低下跌時不夠用的風險`); });
     const near=sumBy(act.filter(g=>{const i=gi[g.id];return i&&i.place==='cash'&&i.m!=null&&i.m<=12;}),g=>g.budget||0);
     if(!pay&&act.length) msgs.push('尚未指定未來基金出金帳戶，未來基金金額為 0（銀行帳戶展開後勾選）');
     if(near>0){ if(pay&&near>pay.demand){ lack=true; msgs.push(`12 個月內到期的現金目標共 ${fmt(near)}，超過出金帳戶「${pay.name}」活存餘額 ${fmt(pay.demand)}`); } }
@@ -638,7 +638,7 @@ function FireCard({d,c,fund,setD,onClick}) {
     if(t.covered) tx='已達成（其他收入已涵蓋支出）'; else if(t.target<=0) tx='尚未設定'; else if(t.months==null) tx='無法達成'; else if(t.months===0) tx='已達成';
     else {const dt=addMonths(t.months),age=ageAt(d,dt); tx=`預計 ${dt.getFullYear()} 年${age!=null?`（${age}歲）`:''}`;}
     return (<div className={first?'mt-4':'mt-4 pt-4 border-t-[0.5px] border-neutral-200'} aria-label={name}>
-      <div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-semibold">{name}</div><div className="text-xs text-zinc-500 mt-1 whitespace-normal leading-4">{sub}・{tx}</div></div>
+      <div className="flex items-end justify-between gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-semibold">{name}</div><div className="text-xs text-zinc-500 mt-1 whitespace-normal leading-4">{sub}・{tx}</div></div>
         <Fit className={`shrink-0 max-w-[55%] text-2xl font-medium tabular-nums leading-8 text-right ${txt}`}>{t.pct.toFixed(2)}%</Fit></div>
       <Bar pct={t.pct} color={color}/>
       <div className="grid grid-cols-2 gap-3 mt-2 tabular-nums" aria-label={`${name}目標`}><div className="min-w-0"><div className="text-[11px] text-zinc-400 leading-4">目標資產</div><Fit className="text-sm text-zinc-700">{fmt(t.target)}</Fit></div><div className="min-w-0 text-right"><div className="text-[11px] text-zinc-400 leading-4">目標每月可花</div><Fit className="text-sm text-zinc-700 text-right">{fmt(t.spend)}</Fit></div></div></div>); };
@@ -684,8 +684,8 @@ function FireCard({d,c,fund,setD,onClick}) {
 }
 function FundCard({d,fund}) {
   const fc=fundCalc(d,fund);
-  const msg=fund.target<=0?'尚未設定目標':fc.months==null?'依目前月分配無法達成':fc.months===0?'已達成':(()=>{const dt=addMonths(fc.months);return `預計 ${dt.getFullYear()}/${pad(dt.getMonth()+1)} 達成・距離現在 ${fmtDur(fc.months)}`;})();
-  return (<Card className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-semibold"><TT n="piggy-bank">未來基金</TT></div><div className="text-xs text-zinc-500 mt-1 whitespace-normal leading-4">{msg}</div></div>
+  const msg=fund.target<=0?'尚未設定目標':fc.months==null?'依目前月分配無法達成':fc.months===0?'已達成':(()=>{const dt=addMonths(fc.months);return `預計 ${dt.getFullYear()}/${pad(dt.getMonth()+1)} ・距離 ${fmtDur(fc.months)}`;})();
+  return (<Card className="p-4"><div className="flex items-end justify-between gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-semibold"><TT n="piggy-bank">未來基金</TT></div><div className="text-xs text-zinc-500 mt-1 whitespace-normal leading-4">{msg}</div></div>
     <Fit className="shrink-0 max-w-[55%] text-2xl font-medium tabular-nums leading-8 text-right text-amber-600">{fund.rate.toFixed(2)}%</Fit></div>
     <Bar pct={fund.rate} color="bg-amber-500"/>
     <div className="grid grid-cols-2 gap-3 mt-2 tabular-nums" aria-label="未來基金目標"><div className="min-w-0"><div className="text-[11px] text-zinc-400 leading-4">目標資產</div><Fit className="text-sm text-zinc-700">{fmt(fund.target)}</Fit></div><div className="min-w-0 text-right"><div className="text-[11px] text-zinc-400 leading-4">已準備</div><Fit className="text-sm text-zinc-700 text-right">{fmt(fund.saved)}</Fit></div></div></Card>);
@@ -1436,10 +1436,10 @@ function PageLedger({d,setD,onEdit,onInfo}) {
   const by=(list,cats,tot)=>cats.map(c=>{const v=list.filter(t=>t.cat===c).reduce((s,t)=>s+t.amt,0);return {c,v,p:tot?Math.round(v/tot*100):0};});
   const iRows=by(inc,INCOME_CATS,tI);
   const eRows=by(exp,EXPENSE_CATS,tE).sort((a,b)=>b.v-a.v).slice(0,5);
-  const Stat=({title,color,bg,rows})=>(   // 整張卡片淡底色；標題深色、分類名稱與金額深灰
+  const Stat=({title,color,bg,cat,sec,rows})=>(   // 整張卡片淡底色；標題深色、分類與金額用分類色、百分比用次要色、無資料「-」淡灰
     <div className={`flex-1 p-3 min-w-0 rounded-lg ${bg}`}><div className={`text-sm font-semibold leading-5 mb-2 ${color}`}>{title}</div>
       {rows.map(r=><div key={r.c} className="grid grid-cols-[3.2em_minmax(0,1fr)_34px] gap-x-3 h-[25px] items-center text-xs tabular-nums">
-        <Fit className="font-semibold text-left text-zinc-700">{r.c}</Fit><Fit className={`font-medium text-right ${r.v?'text-zinc-700':'text-zinc-300'}`}>{r.v?fmt(r.v):'-'}</Fit><span className={`font-medium text-right ${r.v?'text-zinc-700':'text-zinc-300'}`}>{r.v?r.p+'%':'-'}</span></div>)}
+        <Fit className={`font-semibold text-left ${cat}`}>{r.c}</Fit><Fit className={`font-medium text-right ${r.v?cat:'text-zinc-300'}`}>{r.v?fmt(r.v):'-'}</Fit><span className={`font-medium text-right ${r.v?sec:'text-zinc-300'}`}>{r.v?r.p+'%':'-'}</span></div>)}
     </div>);
   const RC='relative grid grid-cols-[40px_minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1.4fr)_22px] gap-x-2 px-2.5 items-center';   // 日期｜分類｜項目（等寬）｜金額（最寬）｜備註（最右）
   return (<div className="px-4 pt-[17px] flex flex-col gap-3">
@@ -1448,7 +1448,7 @@ function PageLedger({d,setD,onEdit,onInfo}) {
       <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月總支出</div><Fit className="text-lg font-semibold leading-7 text-red-600 mt-1">{fmt(tE)}</Fit></div>
       <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月投資</div><Fit className="text-lg font-semibold leading-7 text-purple-600 mt-1">{fmt(tV)}</Fit></div>
     </Card>
-    <div className="flex gap-3"><Stat title="收入統計" color="text-green-800" bg="bg-[#EAF5ED]" rows={iRows}/><Stat title="支出統計" color="text-red-800" bg="bg-[#FBECEC]" rows={eRows}/></div>
+    <div className="flex gap-3"><Stat title="收入統計" color="text-[#246B43]" bg="bg-[#E8F3EB]" cat="text-[#315B43]" sec="text-[#718C79]" rows={iRows}/><Stat title="支出統計" color="text-[#A63838]" bg="bg-[#F8EAEA]" cat="text-[#684747]" sec="text-[#9B7777]" rows={eRows}/></div>
     <div className="mt-2">
       <div className={`${RC} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span className="text-left">日期</span><span className="text-left">分類</span><span className="text-left">項目</span><span className="text-right">金額</span><span className="text-center">備註</span></div>
       {!cur.length&&<div className="text-xs text-zinc-400 text-center py-6">本月尚無收支，按下方「+」新增</div>}
@@ -1510,7 +1510,7 @@ function LoginScreen() {
     });
   };
   return (<div className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center gap-4 px-8 text-center">
-    <h1 className="text-xl font-semibold m-0">錢錢💰</h1>
+    <h1 className="text-xl font-semibold m-0">Finger</h1>
     <p className="text-sm text-zinc-500 m-0 whitespace-normal">登入後，你的資料會存到雲端，換裝置也能看到。</p>
     <button onClick={login} className="h-11 px-6 rounded-lg bg-black text-white text-sm font-medium">使用 Google 登入</button>
     {err&&<p className="text-xs text-red-600 m-0 whitespace-normal">{err}</p>}
@@ -1539,37 +1539,47 @@ function IncomeSheet({d,setD,onClose}) {
 /* ============ 新手引導（只在第一次使用時出現） ============ */
 const ONB_EMPTY=d=>!d.accounts.length&&!d.holdings.length&&!d.tx.length&&!d.history.length&&!d.goals.length&&!d.wishlist.length&&!(d.salary>0)&&!(d.profile&&(d.profile.nick||d.profile.birth))&&!d.allocation.some(c=>c.items.length);
 const needOnb=d=>!d.onboarded&&(!!d.onboard||ONB_EMPTY(d));   // 已完成/略過 → 不再出現；進行到一半（onboard 有值）→ 接續；其他情況只有「全空資料」才會觸發
-const ONB_STEPS=[['user','基本資料'],['landmark','銀行帳戶'],['chart-candlestick','股票持股'],['sliders-horizontal','每月現金分配']];
-const ONB_PRESET={'必要開銷':['房租／房貸','餐飲','水電網路','交通','保險'],'選擇消費':['娛樂','旅遊','購物'],'投資理財':['定期定額投資'],'未來基金':['未來基金']};
+const ONB_STEPS=[['user','基本資料'],['landmark','銀行帳戶'],['chart-candlestick','股票持股'],['wallet','設定收入'],['sliders-horizontal','每月現金分配'],['gift','設定不定期獎金']];
+const ONB_IN=4;   // 前 4 張是「認識 Finger」（只看不填），之後才是設定步驟
+const ONB_INTRO=[['wallet','我的資產','看總資產、資產變化，以及「財務健康檢查」的參考提醒。'],['chart-no-axes-combined','資產細節','設定銀行帳戶、持股、每月現金分配與不定期獎金，其他頁面的數字都由這裡來。'],['target','未來基金','為有預計使用時間的大額支出（買房、旅遊、進修…）提前準備，也能看 FIRE 倒數計時。'],['notebook-pen','每月記帳','記錄每月的收入、支出與投資，看收入／支出統計。']];
+const ONB_PRESET={'必要開銷':['房租／房貸','餐飲','水電網路','交通','保險'],'選擇消費':['娛樂','旅遊','購物']};   // 引導裡的「每月現金分配」只分配支出；投資理財／未來基金之後到資產細節設定
 function Onboard({d,setD}) {
-  const [step,setStep]=useState(Math.min((d.onboard&&d.onboard.step)||0,4));
+  const [step,setStep]=useState(Math.min((d.onboard&&d.onboard.step)||0,ONB_IN+6));
+  const st=step-ONB_IN;   // 設定步驟編號（<0 = 認識 Finger）
   const [rows,setRows]=useState(null), [sf,setSf]=useState({cur:'TWD',ticker:'',shares:0,cost:0,price:0});
   const go=n=>{ setStep(n); setD(p=>({...p,onboard:{step:n}})); };
   const cleanAcc=()=>setD(p=>({...p,accounts:p.accounts.filter(a=>a.name.trim()||a.demand||a.fixed).map((a,i)=>a.name.trim()?a:{...a,name:'帳戶'+(i+1)})}));
   const finish=()=>setD(p=>({...p,onboarded:true,onboard:null,...(p.history.length?{}:{snapAsked:curYM()})}));   // 全新使用者沒有「上個月」可補登：本月先不跳補登提醒
   const initRows=()=>{ const r=[]; d.allocation.forEach(c=>{ c.items.forEach(it=>r.push({cat:c.id,id:it.id,name:it.name,amt:it.amt})); (ONB_PRESET[c.label]||[]).filter(n=>!c.items.some(it=>it.name===n)).forEach(n=>r.push({cat:c.id,id:null,name:n,amt:0})); }); return r; };
   useEffect(()=>{ if(!d.onboard) setD(p=>p.onboard?p:{...p,onboard:{step}}); },[]);   // 一開始就標記「進行中」，之後填了資料也不會因為「不再是空資料」而消失
-  useEffect(()=>{ if(step===1&&!d.accounts.length) setD(p=>p.accounts.length?p:{...p,accounts:[{id:uid(),name:'',demand:0,fixed:0,m:DEF_M()}]}); if(step===3&&!rows) setRows(initRows()); },[step]);
+  useEffect(()=>{ if(st===1&&!d.accounts.length) setD(p=>p.accounts.length?p:{...p,accounts:[{id:uid(),name:'',demand:0,fixed:0,m:DEF_M()}]}); if(st===4&&!rows) setRows(initRows()); },[step]);
   const applyRows=()=>{ if(!rows) return; setD(p=>({...p,allocation:p.allocation.map(c=>{ const mine=rows.filter(r=>r.cat===c.id);
     const items=c.items.filter(it=>mine.some(x=>x.id===it.id)).map(it=>{const r=mine.find(x=>x.id===it.id);return {...it,amt:r.amt};});   // 在引導裡刪掉的既有項目一併移除
     mine.filter(r=>!r.id&&r.name.trim()&&r.amt>0).forEach(r=>{ if(!items.some(it=>it.name===r.name.trim())) items.push({id:uid(),name:r.name.trim(),amt:r.amt}); });
     return {...c,items}; })})); };
-  const next=()=>{ if(step===1) cleanAcc(); if(step===3) applyRows(); go(step+1); };
-  const back=()=>{ if(step===1) cleanAcc(); go(step-1); };
+  const cleanInc=()=>setD(p=>({...p,incomes:(p.incomes||[]).filter(x=>x.name.trim()||x.amt>0).map(x=>x.name.trim()?x:{...x,name:'其他收入'})}));
+  const cleanBonus=()=>setD(p=>({...p,bonuses:(p.bonuses||[]).filter(b=>b.name.trim()||b.amt>0).map(b=>b.name.trim()?b:{...b,name:'獎金'})}));
+  const tidy=()=>{ if(st===1) cleanAcc(); if(st===3) cleanInc(); if(st===4) applyRows(); if(st===5) cleanBonus(); };
+  const next=()=>{ tidy(); go(step+1); };
+  const back=()=>{ if(st===1) cleanAcc(); if(st===3) cleanInc(); if(st===5) cleanBonus(); go(step-1); };
+  const setInc=(id,patch)=>setD(p=>({...p,incomes:(p.incomes||[]).map(x=>x.id===id?{...x,...patch}:x)}));
+  const setBn=(id,patch)=>setD(p=>({...p,bonuses:(p.bonuses||[]).map(b=>b.id===id?{...b,...patch}:b)}));
   const setRow=(i,patch)=>setRows(rs=>rs.map((r,j)=>j===i?{...r,...patch}:r)), delRow=i=>setRows(rs=>rs.filter((_,j)=>j!==i));
   const addRow=cid=>setRows(rs=>[...rs,{cat:cid,id:null,name:'',amt:0}]);
   const c=calcAssets(d), salary=d.salary||0;
-  const bal=salary-(rows?sumBy(rows,r=>r.amt):0);
+  const inc=monthInc(d), bal=inc-(rows?sumBy(rows,r=>r.amt):0);
   const canAdd=sf.ticker.trim()&&sf.shares>0&&sf.cost>0;
   const addStock=()=>{ const sp={kind:'buy',ticker:sf.ticker.trim().toUpperCase(),cur:sf.cur,ptype:'stock',date:todayISO(),shares:sf.shares,price:sf.cost,fee:0,noBank:true,price0:sf.price||sf.cost}; const r=applyTrade(d,sp); if(r.err){alert(r.err);return;} setD(p=>{const r2=applyTrade(p,sp);return r2.err?p:r2.p;}); setSf(s=>({...s,ticker:'',shares:0,cost:0,price:0})); };
   const setAccF=(id,patch)=>setD(p=>({...p,accounts:p.accounts.map(x=>x.id===id?{...x,...patch}:x)}));
   const lab='text-xs text-zinc-500 mb-1', tit=(n,t)=><div className="text-lg font-semibold mb-1"><TT n={ONB_STEPS[n][0]} s={22}>{t}</TT></div>;
   const body=()=>{
-    if(step===0) return <div className="flex flex-col gap-4">{tit(0,'歡迎使用錢錢💰')}
-      <p className="text-sm text-zinc-500 m-0 leading-6 whitespace-normal">花 1 分鐘建立你的基本資料，之後主頁就有完整的數字。每一步都可以先略過，之後隨時在主頁補上。</p>
+    if(step<ONB_IN){ const [ic,ti,tx]=ONB_INTRO[step]; return <div className="flex flex-col gap-4 pt-4">{step===0&&<div><div className="text-xl font-semibold mb-1">歡迎使用 Finger</div><p className="text-sm text-zinc-500 m-0 leading-6 whitespace-normal">先花一分鐘認識四個頁面，再開始設定。</p></div>}
+      <Card className="p-5 flex flex-col gap-3"><div className="text-lg font-semibold"><TT n={ic} s={22}>{ti}</TT></div><p className="text-sm text-zinc-600 m-0 leading-6 whitespace-normal">{tx}</p></Card></div>; }
+    if(st===0) return <div className="flex flex-col gap-4">{tit(0,'基本資料')}
+      <p className="text-sm text-zinc-500 m-0 leading-6 whitespace-normal">建立你的基本資料，之後主頁就有完整的數字。每一步都可以先略過，之後隨時補上。</p>
       <div><div className={lab}>暱稱</div><Txt value={d.profile.nick} onChange={v=>setD(p=>({...p,profile:{...p.profile,nick:v}}))} ph="你的暱稱" className="h-11 w-full"/></div>
       <div><div className={lab}>生日（用來計算 FIRE 達成年齡）</div><DateBox clearable value={d.profile.birth} onChange={v=>setD(p=>({...p,profile:{...p.profile,birth:v}}))}/></div></div>;
-    if(step===1) return <div className="flex flex-col gap-3">{tit(1,'銀行帳戶')}
+    if(st===1) return <div className="flex flex-col gap-3">{tit(1,'銀行帳戶')}
       <p className="text-sm text-zinc-500 m-0 leading-6 whitespace-normal">填入目前的存款。利率、高利活存等細節之後到「資產細節」設定。</p>
       {d.accounts.map(a=>(<Card key={a.id} className="p-3 flex flex-col gap-1">
         <div className="flex items-center gap-2"><Txt value={a.name} onChange={v=>setAccF(a.id,{name:v})} ph="帳戶名稱（例如：玉山銀行）" className="flex-1 h-11"/>
@@ -1577,7 +1587,7 @@ function Onboard({d,setD}) {
         <Num label="活存餘額" value={a.demand} onChange={v=>setAccF(a.id,{demand:v})}/>
         <Num label="定存金額" value={a.fixed} onChange={v=>setAccF(a.id,{fixed:v})}/></Card>))}
       <button onClick={()=>setD(p=>({...p,accounts:[...p.accounts,{id:uid(),name:'',demand:0,fixed:0,m:DEF_M()}]}))} className="h-11 rounded-lg border border-dashed border-neutral-300 text-sm text-zinc-600 flex items-center justify-center gap-1.5"><Ic n="plus" s={16}/>再新增一個帳戶</button></div>;
-    if(step===2) return <div className="flex flex-col gap-3">{tit(2,'股票持股')}
+    if(st===2) return <div className="flex flex-col gap-3">{tit(2,'股票持股')}
       <p className="text-sm text-zinc-500 m-0 leading-6 whitespace-normal">補登目前持有的股票或 ETF（不會動到銀行餘額）。均價是你的平均買進成本。</p>
       {d.holdings.map(hd=>{const v=holdVals(hd);return (<Card key={hd.id} className="px-3 py-2 flex items-center gap-2"><div className="flex-1 min-w-0"><div className="text-sm font-semibold">{hd.ticker}　<span className="text-xs font-normal text-zinc-400">{hd.cur==='USD'?'美股':'台股'}</span></div><div className="text-[11px] text-zinc-500">{Math.round(v.sh*1000)/1000} 股 · 均價 {Math.round(v.avg*100)/100}</div></div>
         <button aria-label="移除持股" onClick={()=>setD(p=>({...p,holdings:p.holdings.filter(x=>x.id!==hd.id)}))} className="px-1.5 h-9 text-red-600 shrink-0"><Ic n="trash" s={16}/></button></Card>);})}
@@ -1589,33 +1599,48 @@ function Onboard({d,setD}) {
         <Num label="現價（可留空）" value={sf.price} onChange={v=>setSf(s=>({...s,price:v}))} dec={4}/>
         {sf.cur==='USD'&&<Num label="美元匯率" value={d.fx||32} onChange={v=>setD(p=>({...p,fx:v}))} dec={3}/>}
         <button disabled={!canAdd} onClick={addStock} className="h-11 rounded-lg bg-black text-white text-sm font-medium disabled:opacity-30 mt-1 flex items-center justify-center gap-1.5"><Ic n="plus" s={16}/>加入這檔持股</button></Card></div>;
-    if(step===3) return <div className="flex flex-col gap-3">{tit(3,'每月現金分配')}
-      <p className="text-sm text-zinc-500 m-0 leading-6 whitespace-normal">先填每月固定分配（薪水），再把它分到各個用途。金額 0 的項目不會建立，之後也能自己新增。</p>
-      <Card className="p-3"><Num label="每月固定分配" value={salary} onChange={v=>setD(p=>({...p,salary:v}))}/></Card>
+    if(st===3) return <div className="flex flex-col gap-3">{tit(3,'設定收入')}
+      <p className="text-sm text-zinc-500 m-0 leading-6 whitespace-normal">填入平均每月的收入。這是下一步分配支出的基礎；其他收入（租金、副業…）可以另外新增，「退休後仍持續」等細節之後到「資產細節」設定。</p>
+      <Card className="p-3"><Num label="每月薪資" value={salary} onChange={v=>setD(p=>({...p,salary:v}))}/></Card>
+      {(d.incomes||[]).map(x=>(<Card key={x.id} className="p-3 flex items-center gap-2"><Txt value={x.name} onChange={v=>setInc(x.id,{name:v})} ph="其他收入名稱（例如：租金）" className="flex-1 min-w-0 h-9"/><NumBox value={x.amt} onChange={v=>setInc(x.id,{amt:v})} className="w-28 h-9 px-3 text-sm"/>
+        <button aria-label="移除收入項目" onClick={()=>setD(p=>({...p,incomes:(p.incomes||[]).filter(y=>y.id!==x.id)}))} className="px-1.5 h-9 text-red-600 shrink-0"><Ic n="trash" s={16}/></button></Card>))}
+      <button onClick={()=>setD(p=>({...p,incomes:[...(p.incomes||[]),{id:uid(),name:'',amt:0,retire:false}]}))} className="h-11 rounded-lg border border-dashed border-neutral-300 text-sm text-zinc-600 flex items-center justify-center gap-1.5"><Ic n="plus" s={16}/>新增其他收入</button>
+      <div className="flex justify-between text-sm font-semibold px-1"><span>每月收入合計</span><span>{fmt(inc)}</span></div></div>;
+    if(st===4) return <div className="flex flex-col gap-3">{tit(4,'每月現金分配')}
+      <p className="text-sm text-zinc-500 m-0 leading-6 whitespace-normal">這一步只用來分配「支出」：把每月收入分到必要開銷與選擇消費。投資理財、未來基金等用途之後到「資產細節」設定。金額 0 的項目不會建立，之後也能自己新增。</p>
+      <Card className="p-3 flex justify-between text-sm"><span className="text-zinc-500">每月收入合計</span><span className="font-semibold">{fmt(inc)}</span></Card>
       {rows&&d.allocation.filter(ca=>ONB_PRESET[ca.label]).map(ca=>{const mine=rows.map((r,i)=>[r,i]).filter(([r])=>r.cat===ca.id);return (<Card key={ca.id} className="p-3">
         <div className="flex justify-between text-sm font-semibold mb-1"><span>{ca.label}</span><span className="text-zinc-500">{fmt(sumBy(mine,([r])=>r.amt))}</span></div>
         {mine.map(([r,i])=>(<div key={i} className="flex items-center gap-1"><div className="flex-1 min-w-0">{r.id?<Num label={r.name} value={r.amt} onChange={v=>setRow(i,{amt:v})}/>
           :<div key={i} className="flex items-center justify-between gap-3 py-1.5">{ONB_PRESET[ca.label].includes(r.name)?<span className="flex-1 min-w-0 truncate text-sm">{r.name}</span>:<Txt value={r.name} onChange={v=>setRow(i,{name:v})} ph="項目名稱" className="flex-1 h-9"/>}<NumBox value={r.amt} onChange={v=>setRow(i,{amt:v})}/></div>}</div><button aria-label={`刪除${r.name||'項目'}`} onClick={()=>delRow(i)} className="px-1.5 h-9 text-zinc-400 shrink-0"><Ic n="trash" s={15}/></button></div>))}
         <button onClick={()=>addRow(ca.id)} className="mt-1 text-xs text-zinc-500 flex items-center gap-1"><Ic n="plus" s={14}/>自訂項目</button></Card>);})}
-      <div className={`text-sm font-medium text-center ${bal<0?'text-red-600':bal>0?'text-amber-600':'text-green-700'}`}>{salary<=0?'填入每月固定分配後會顯示剩餘':bal<0?`超出 ${fmt(-bal)}`:bal>0?`剩餘未分配 ${fmt(bal)}`:'分配完整 ✓'}</div></div>;
+      <div className={`text-sm font-medium text-center ${bal<0?'text-red-600':bal>0?'text-amber-600':'text-green-700'}`}>{inc<=0?'上一步填入收入後會顯示剩餘':bal<0?`支出分配超出收入 ${fmt(-bal)}`:bal>0?`剩餘未分配 ${fmt(bal)}`:'分配完整 ✓'}</div></div>;
+    if(st===5) return <div className="flex flex-col gap-3">{tit(5,'設定不定期獎金')}
+      <p className="text-sm text-zinc-500 m-0 leading-6 whitespace-normal">年終、績效、分紅等不是每月固定入帳的收入。填「預期值」即可，會計入年收入與 FIRE 試算；沒有也可以略過。獎金要注入哪些用途，之後到「資產細節」設定。</p>
+      {(d.bonuses||[]).map(b=>(<Card key={b.id} className="p-3 flex flex-col gap-2"><div className="flex items-center gap-2"><Txt value={b.name||''} onChange={v=>setBn(b.id,{name:v})} ph="獎金名稱（例如：年終）" className="flex-1 min-w-0 h-9"/>
+          <button aria-label="移除獎金" onClick={()=>setD(p=>({...p,bonuses:p.bonuses.filter(x=>x.id!==b.id)}))} className="px-1.5 h-9 text-red-600 shrink-0"><Ic n="trash" s={16}/></button></div>
+        <div className="flex items-center gap-2"><NumBox value={b.amt} onChange={v=>setBn(b.id,{amt:v})} className="flex-1 h-9 px-3 text-sm"/>
+          <select value={b.month} onChange={e=>setBn(b.id,{month:+e.target.value})} className="h-9 rounded-lg border border-neutral-200 px-2 text-sm bg-white">{[1,2,3,4,5,6,7,8,9,10,11,12].map(m=><option key={m} value={m}>{m} 月入帳</option>)}</select></div></Card>))}
+      <button onClick={()=>setD(p=>({...p,bonuses:[...(p.bonuses||[]),{id:uid(),name:'',amt:0,month:12,inj:[]}]}))} className="h-11 rounded-lg border border-dashed border-neutral-300 text-sm text-zinc-600 flex items-center justify-center gap-1.5"><Ic n="plus" s={16}/>新增獎金</button></div>;
     return <div className="flex flex-col items-center gap-3 pt-6 text-center"><div className="text-zinc-700"><Ic n="party-popper" s={40}/></div><div className="text-lg font-semibold">設定完成！</div>
       <Card className="w-full p-4 flex flex-col gap-1.5 text-sm text-left"><div className="flex justify-between"><span className="text-zinc-500">目前總資產</span><span className="font-semibold">{fmt(c.total)}</span></div>
         <div className="flex justify-between"><span className="text-zinc-500">銀行帳戶</span><span>{d.accounts.length} 個</span></div>
         <div className="flex justify-between"><span className="text-zinc-500">股票持股</span><span>{d.holdings.length} 檔</span></div>
-        <div className="flex justify-between"><span className="text-zinc-500">每月固定分配</span><span>{fmt(salary)}</span></div>
-        <div className="flex justify-between"><span className="text-zinc-500">未分配</span><span>{fmt(salary-sumBy(d.allocation,catTotal))}</span></div></Card>
+        <div className="flex justify-between"><span className="text-zinc-500">每月收入</span><span>{fmt(inc)}</span></div>
+        <div className="flex justify-between"><span className="text-zinc-500">未分配</span><span>{fmt(inc-sumBy(d.allocation,catTotal))}</span></div></Card>
       <p className="text-xs text-zinc-400 m-0 whitespace-normal leading-5">沒填的部分之後可在主頁補上；想再走一次引導，到左上角選單選「重新設定引導」。</p></div>;
   };
-  const last=step===4;
+  const last=st===6;
   return (<div className="fixed inset-0 z-[35] bg-white flex flex-col" role="dialog" aria-label="新手引導">
     <div className="w-full max-w-[393px] mx-auto flex flex-col h-full" style={{paddingTop:'env(safe-area-inset-top,0px)'}}>
-      <div className="px-5 pt-5 pb-2"><div className="flex items-center justify-between mb-2"><span className="text-xs text-zinc-400">{last?'完成':`步驟 ${step+1} / 4`}</span>{!last&&<button onClick={()=>{ if(step===1) cleanAcc(); if(step===3) applyRows(); finish(); }} className="text-xs text-zinc-400">略過全部</button>}</div>
-        <div className="flex gap-1.5">{[0,1,2,3].map(i=><i key={i} className={`h-1 flex-1 rounded-full ${i<=step?'bg-black':'bg-neutral-200'}`}/>)}</div></div>
+      <div className="px-5 pt-5 pb-2"><div className="flex items-center justify-between mb-2"><span className="text-xs text-zinc-400">{last?'完成':(step<ONB_IN?`認識 Finger ${step+1} / ${ONB_IN}`:`步驟 ${st+1} / 6`)}</span>{!last&&<button onClick={()=>{ tidy(); finish(); }} className="text-xs text-zinc-400">略過全部</button>}</div>
+        <div className="flex gap-1.5">{[0,1,2,3,4,5,6,7,8,9].map(i=><i key={i} className={`h-1 flex-1 rounded-full ${i<=step?'bg-black':'bg-neutral-200'}`}/>)}</div></div>
       <div className="flex-1 overflow-y-auto px-5 py-3">{body()}</div>
       <div className="px-5 pt-3 flex gap-2 border-t border-neutral-200" style={{paddingBottom:'max(16px,env(safe-area-inset-bottom,0px))'}}>
         {step>0&&!last&&<button onClick={back} aria-label="上一步" className="h-11 px-4 rounded-lg border border-neutral-200 text-sm flex items-center gap-1"><Ic n="arrow-left" s={16}/>上一步</button>}
-        {!last&&step>0&&<button onClick={next} className="h-11 px-3 text-sm text-zinc-500">稍後再填</button>}
-        <button onClick={last?finish:next} className="h-11 flex-1 rounded-lg bg-black text-white text-sm font-medium">{last?'開始使用':step===3?'完成':'下一步'}</button></div>
+        {!last&&st>=1&&<button onClick={next} className="h-11 px-3 text-sm text-zinc-500">稍後再填</button>}
+        {step<ONB_IN-0&&<button onClick={()=>go(ONB_IN)} className="h-11 px-3 text-sm text-zinc-500">略過介紹</button>}
+        <button onClick={last?finish:next} className="h-11 flex-1 rounded-lg bg-black text-white text-sm font-medium">{last?'開始使用':st===5?'完成':'下一步'}</button></div>
     </div></div>);
 }
 
@@ -1782,7 +1807,7 @@ function App() {
   return (<div className="relative w-full max-w-[393px] mx-auto min-h-screen bg-white overflow-hidden" style={{paddingTop:'env(safe-area-inset-top,0px)'}}>
     <header className="h-14 relative flex items-center justify-center mt-[19px]">
       <button onClick={()=>setProfile(true)} className="absolute left-4 w-6 h-6 flex flex-col justify-center gap-[6px] px-[3px]" aria-label="選單"><i className="block h-0.5 bg-black w-4"/><i className="block h-0.5 bg-black w-3.5"/><i className="block h-0.5 bg-black w-4"/></button>
-      <h1 className="text-xl font-semibold leading-7 m-0">{d.profile&&d.profile.nick?d.profile.nick+'的錢錢💰':'錢錢💰'}</h1>
+      <h1 className="text-xl font-semibold leading-7 m-0">{d.profile&&d.profile.nick?d.profile.nick+'的 Finger':'Finger'}</h1>
       <div onClick={()=>{if(sync.k==='error'||sync.k==='offline')retryNow();}} className={`absolute bottom-0 inset-x-0 text-center text-[10px] leading-3 ${sync.k==='error'?'text-red-500 cursor-pointer':sync.k==='offline'?'text-amber-500 cursor-pointer':'text-zinc-400'}`}>{sync.t}</div>
       <button onClick={toggleHide} aria-label={hide?'顯示數字':'隱藏數字'} className="absolute right-4 w-6 h-6 flex items-center justify-center">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1823,7 +1848,7 @@ function App() {
       <div><div className="text-xs text-zinc-500 mb-1">生日（用來計算 FIRE 達成年齡）</div><DateBox clearable value={d.profile.birth} onChange={v=>setD(p=>({...p,profile:{...p.profile,birth:v}}))}/></div>
       {CONFIGURED&&auth.currentUser&&<div className="text-xs text-zinc-500">{auth.currentUser.email}</div>}
       <button onClick={()=>{if(confirm('清空所有資料（帳戶、記帳、目標、持股…）？此動作無法復原。')){setD(p=>({...mockData,profile:p.profile,onboarded:p.onboarded,onboard:null}));setProfile(false);}}} className="h-11 rounded-lg border border-neutral-200 text-sm font-medium text-red-600">清空所有資料</button>
-      <button onClick={()=>{setProfile(false);setD(p=>({...p,onboarded:false,onboard:{step:0}}));}} className="h-11 rounded-lg border border-neutral-200 text-sm font-medium">重新設定引導</button>
+      <button onClick={()=>{setProfile(false);setD(p=>({...p,onboarded:false,onboard:{step:ONB_IN}}));}} className="h-11 rounded-lg border border-neutral-200 text-sm font-medium">重新設定引導</button>
       {CONFIGURED&&<button onClick={()=>{setProfile(false);auth.signOut();}} className="h-11 rounded-lg border border-neutral-200 text-sm font-medium">登出</button>}
     </div></Sheet>}
     {calcCfg&&<CalcPad cfg={calcCfg} onClose={()=>setCalcCfg(null)}/>}

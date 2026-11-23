@@ -639,9 +639,9 @@ function FireCard({d,c,fund,setD,onClick}) {
     else {const dt=addMonths(t.months),age=ageAt(d,dt); tx=`預計 ${dt.getFullYear()} 年${age!=null?`（${age}歲）`:''}`;}
     return (<div className={first?'mt-4':'mt-4 pt-4 border-t-[0.5px] border-neutral-200'} aria-label={name}>
       <div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-semibold">{name} <span className="font-normal text-zinc-400">({sub})</span></div><div className="text-xs text-zinc-500 mt-1 whitespace-normal leading-4">{tx}</div></div>
-        <div className="shrink-0 max-w-[50%] text-right"><Fit className={`text-2xl font-medium tabular-nums leading-8 text-right ${txt}`}>{t.pct.toFixed(2)}%</Fit><div className="text-xs text-zinc-500 -mt-0.5">達成率</div></div></div>
+        <Fit className={`shrink-0 max-w-[45%] text-base font-semibold tabular-nums leading-6 text-right ${txt}`}>{t.pct.toFixed(2)}%</Fit></div>
       <Bar pct={t.pct} color={color}/>
-      <div className="grid grid-cols-2 gap-2 mt-1.5 text-xs text-zinc-500 tabular-nums" aria-label={`${name}目標`}><Fit className="min-w-0">目標資產 {fmt(t.target)}</Fit><Fit className="min-w-0 text-right">目標每月可花 {fmt(t.spend)}</Fit></div></div>); };
+      <div className="grid grid-cols-2 gap-3 mt-2 tabular-nums" aria-label={`${name}目標`}><div className="min-w-0"><div className="text-[11px] text-zinc-400 leading-4">目標資產</div><Fit className="text-sm text-zinc-700">{fmt(t.target)}</Fit></div><div className="min-w-0 text-right"><div className="text-[11px] text-zinc-400 leading-4">目標每月可花</div><Fit className="text-sm text-zinc-700 text-right">{fmt(t.spend)}</Fit></div></div></div>); };
   const status=()=><div className="mt-3 rounded-xl bg-neutral-50 px-3.5 py-2.5 flex items-baseline justify-between gap-2" aria-label="目前每月可花"><span className="text-xs text-zinc-500 shrink-0">目前每月可花</span><Fit className="text-sm font-semibold tabular-nums">{fmt(f.nowSpend)}</Fit></div>;   // 兩張卡共用，只在這裡顯示一次（資料來源 f.nowSpend）
   const strip=(name,k)=><div className="text-xs text-zinc-600 mt-1 whitespace-normal leading-5">{name}：{SCEN.map(([key,l])=>`${l} ${fireWhen(f.sc[key][k],d).replace(/（.*）/,'')}`).join('｜')}</div>;
   const retireBody=()=>{ const over=rv.ratio!=null&&rv.ratio>1, pct=rv.ratio!=null?Math.min(100,rv.ratio*100):0;
@@ -675,9 +675,9 @@ function FundCard({d,fund}) {
   const fc=fundCalc(d,fund);
   const msg=fund.target<=0?'尚未設定目標':fc.months==null?'依目前月分配無法達成':fc.months===0?'已達成':(()=>{const dt=addMonths(fc.months);return `預計 ${dt.getFullYear()}/${pad(dt.getMonth()+1)} 達成（距離現在還有 ${fmtDur(fc.months)}）`;})();
   return (<Card className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-semibold"><TT n="piggy-bank">未來基金</TT></div><div className="text-xs text-zinc-500 mt-1 whitespace-normal leading-4">{msg}</div></div>
-    <div className="shrink-0 max-w-[50%] text-right"><Fit className="text-2xl font-medium tabular-nums leading-8 text-right text-amber-600">{fund.rate.toFixed(2)}%</Fit><div className="text-xs text-zinc-500 -mt-0.5">達成率</div></div></div>
+    <Fit className="shrink-0 max-w-[45%] text-base font-semibold tabular-nums leading-6 text-right text-amber-600">{fund.rate.toFixed(2)}%</Fit></div>
     <Bar pct={fund.rate} color="bg-amber-500"/>
-    <div className="grid grid-cols-2 gap-2 mt-1.5 text-xs text-zinc-500 tabular-nums" aria-label="未來基金目標"><Fit className="min-w-0">目標資產 {fmt(fund.target)}</Fit><Fit className="min-w-0 text-right">已準備 {fmt(fund.saved)}</Fit></div></Card>);
+    <div className="grid grid-cols-2 gap-3 mt-2 tabular-nums" aria-label="未來基金目標"><div className="min-w-0"><div className="text-[11px] text-zinc-400 leading-4">目標資產</div><Fit className="text-sm text-zinc-700">{fmt(fund.target)}</Fit></div><div className="min-w-0 text-right"><div className="text-[11px] text-zinc-400 leading-4">已準備</div><Fit className="text-sm text-zinc-700 text-right">{fmt(fund.saved)}</Fit></div></div></Card>);
 }
 function AiCard({title,items,risk,onRisk}) {
   const dot={good:'#22c55e',warn:'#ef4444',info:'#f59e0b'}, lab={good:'良好',warn:'需注意',info:'留意'};
@@ -1426,27 +1426,27 @@ function PageLedger({d,setD,onEdit,onInfo}) {
   const iRows=by(inc,INCOME_CATS,tI);
   const eRows=by(exp,EXPENSE_CATS,tE).sort((a,b)=>b.v-a.v).slice(0,5);
   const Stat=({title,color,bg,rows})=>(   // 整張卡片淡底色；標題深色、分類名稱與金額深灰
-    <div className={`flex-1 p-3 min-w-0 rounded-lg border ${bg}`}><div className={`text-sm font-semibold leading-5 mb-2 ${color}`}>{title}</div>
-      {rows.map(r=><div key={r.c} className="grid grid-cols-[3.4em_1fr_30px] gap-2 h-[25px] items-center text-xs">
-        <Fit className="font-semibold text-zinc-700">{r.c}</Fit><Fit className="font-medium text-zinc-700 min-w-0">{r.v?fmt(r.v):'-'}</Fit><span className="font-medium text-zinc-700 text-right">{r.v?r.p+'%':'-'}</span></div>)}
+    <div className={`flex-1 p-3 min-w-0 rounded-lg ${bg}`}><div className={`text-sm font-semibold leading-5 mb-2 ${color}`}>{title}</div>
+      {rows.map(r=><div key={r.c} className="grid grid-cols-[3.2em_minmax(0,1fr)_34px] gap-x-3 h-[25px] items-center text-xs tabular-nums">
+        <Fit className="font-semibold text-left text-zinc-700">{r.c}</Fit><Fit className={`font-medium text-right ${r.v?'text-zinc-700':'text-zinc-300'}`}>{r.v?fmt(r.v):'-'}</Fit><span className={`font-medium text-right ${r.v?'text-zinc-700':'text-zinc-300'}`}>{r.v?r.p+'%':'-'}</span></div>)}
     </div>);
-  const RC='relative grid grid-cols-[44px_1fr_1fr_2fr_28px] gap-2 px-2.5 items-center';   // 日期｜分類｜項目（等寬）｜金額（最寬）｜備註（最右）
+  const RC='relative grid grid-cols-[40px_minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1.4fr)_22px] gap-x-2 px-2.5 items-center';   // 日期｜分類｜項目（等寬）｜金額（最寬）｜備註（最右）
   return (<div className="px-4 pt-[17px] flex flex-col gap-3">
     <Card className="h-[102px] px-2 grid grid-cols-3 gap-2 items-center text-center">
-      <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月總收入</div><Fit className="text-lg font-semibold leading-8 text-green-700 mt-2">{fmt(tI)}</Fit></div>
-      <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月總支出</div><Fit className="text-lg font-semibold leading-8 text-red-600 mt-2">{fmt(tE)}</Fit></div>
-      <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月投資</div><Fit className="text-lg font-semibold leading-8 text-purple-600 mt-2">{fmt(tV)}</Fit></div>
+      <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月總收入</div><Fit className="text-lg font-semibold leading-7 text-green-700 mt-1">{fmt(tI)}</Fit></div>
+      <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月總支出</div><Fit className="text-lg font-semibold leading-7 text-red-600 mt-1">{fmt(tE)}</Fit></div>
+      <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月投資</div><Fit className="text-lg font-semibold leading-7 text-purple-600 mt-1">{fmt(tV)}</Fit></div>
     </Card>
-    <div className="flex gap-3"><Stat title="收入統計" color="text-green-800" bg="bg-green-50 border-green-200" rows={iRows}/><Stat title="支出統計" color="text-red-800" bg="bg-red-50 border-red-200" rows={eRows}/></div>
+    <div className="flex gap-3"><Stat title="收入統計" color="text-green-800" bg="bg-[#EAF5ED]" rows={iRows}/><Stat title="支出統計" color="text-red-800" bg="bg-[#FBECEC]" rows={eRows}/></div>
     <div className="mt-2">
-      <div className={`${RC} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span className="text-center">日期</span><span className="text-center">分類</span><span className="text-center">項目</span><span className="text-center">金額</span><span className="text-center">備註</span></div>
+      <div className={`${RC} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span className="text-left">日期</span><span className="text-left">分類</span><span className="text-left">項目</span><span className="text-right">金額</span><span className="text-center">備註</span></div>
       {!cur.length&&<div className="text-xs text-zinc-400 text-center py-6">本月尚無收支，按下方「+」新增</div>}
       {cur.map(t=>(
         <SwipeRow key={t.id} open={openId&&openId.id===t.id?openId.side:null} onOpen={side=>setOpenId({id:t.id,side})} onClose={()=>setOpenId(null)} onEdit={()=>{setOpenId(null);onEdit(t);}}>
-          <div className={`${RC} h-[37px] text-xs font-medium`}>
+          <div className={`${RC} h-[32px] text-xs font-medium`}>
             <i className={`absolute left-[2px] top-1/2 -translate-y-1/2 w-[5px] h-[5px] rounded-full ${t.type==='income'?'bg-green-500':t.type==='invest'?'bg-purple-500':'bg-red-500'}`}/>
-            <Fit className="min-w-0 text-center">{fmtMD(t.date)}</Fit><Fit className="min-w-0 text-center">{t.cat}</Fit><Fit className="min-w-0 text-center">{t.item}</Fit><Fit className="min-w-0 text-center">{fmt(t.amt)}</Fit>
-            <button onClick={e=>{e.stopPropagation();onInfo(t);}} aria-label="備註" className={`w-4 h-4 rounded-full text-white text-[11px] font-bold flex items-center justify-center ${t.note?'bg-blue-500':'bg-neutral-300'}`}>i</button>
+            <Fit className="min-w-0 text-left">{fmtMD(t.date)}</Fit><Fit className="min-w-0 text-left">{t.cat}</Fit><Fit className="min-w-0 text-left">{t.item}</Fit><Fit className="min-w-0 text-right tabular-nums">{fmt(t.amt)}</Fit>
+            <button onClick={e=>{e.stopPropagation();onInfo(t);}} aria-label="備註" className={`w-4 h-4 justify-self-center rounded-full text-white text-[11px] font-bold flex items-center justify-center ${t.note?'bg-blue-500':'bg-neutral-300'}`}>i</button>
           </div>
         </SwipeRow>))}
     </div>

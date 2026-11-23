@@ -1807,8 +1807,9 @@ function App() {
   return (<div className="relative w-full max-w-[393px] mx-auto min-h-screen bg-white overflow-hidden" style={{paddingTop:'env(safe-area-inset-top,0px)'}}>
     <header className="h-14 relative flex items-center justify-center mt-[19px]">
       <button onClick={()=>setProfile(true)} className="absolute left-4 w-6 h-6 flex flex-col justify-center gap-[6px] px-[3px]" aria-label="選單"><i className="block h-0.5 bg-black w-4"/><i className="block h-0.5 bg-black w-3.5"/><i className="block h-0.5 bg-black w-4"/></button>
-      <h1 className="text-xl font-semibold leading-7 m-0">{d.profile&&d.profile.nick?d.profile.nick+'的 Finger':'Finger'}</h1>
-      <div onClick={()=>{if(sync.k==='error'||sync.k==='offline')retryNow();}} className={`absolute bottom-0 inset-x-0 text-center text-[10px] leading-3 ${sync.k==='error'?'text-red-500 cursor-pointer':sync.k==='offline'?'text-amber-500 cursor-pointer':'text-zinc-400'}`}>{sync.t}</div>
+      <div className="flex flex-col items-center max-w-[60%]"><h1 className="text-xl font-semibold leading-7 m-0">Finger</h1>
+        <div onClick={()=>{if(sync.k==='error'||sync.k==='offline')retryNow();}} aria-label="同步狀態" className={`flex items-center justify-center max-w-full text-[11px] leading-[14px] ${sync.k==='error'?'text-red-500 cursor-pointer':sync.k==='offline'?'text-amber-500 cursor-pointer':'text-zinc-400'}`}>
+          {(sync.k==='error'||sync.k==='offline')?<span className="truncate">{sync.t}</span>:<>{d.profile&&d.profile.nick&&<><span className="truncate min-w-0 text-zinc-500">Hi {d.profile.nick}</span><span className="shrink-0 whitespace-pre"> ・ </span></>}<span className="shrink-0 whitespace-nowrap">{sync.t}</span></>}</div></div>
       <button onClick={toggleHide} aria-label={hide?'顯示數字':'隱藏數字'} className="absolute right-4 w-6 h-6 flex items-center justify-center">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>{hide&&<path d="M3 3l18 18"/>}</svg>

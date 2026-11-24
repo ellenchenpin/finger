@@ -260,7 +260,7 @@ const growthItem=(d,c,R)=>{
   const conc=c.invest>0&&(us>80||us<20)?` 持股集中在單一市場（${Math.max(us,100-us).toFixed(0)}%）。`:'';
   if(c.total<=0) return {t:'資產配置',s:'info',sum:'先新增銀行帳戶與持股',basis:'目前沒有資產資料',why:'有資產之後才能檢視成長型、防禦型與閒置資金的比例。',act:'先到「資產細節」新增銀行帳戶與持股。'};
   const s=gp<lo?'info':gp>hi?'info':'good';
-  return {t:'資產配置',s,sum:gp<lo?'成長型偏低，可評估是否調整':gp>hi?'成長型偏高，留意市場大跌時的波動':'成長型比例落在偏好區間',basis:`成長型 ${gp.toFixed(0)}%、防禦型 ${dfp.toFixed(0)}%、死水 ${dp.toFixed(0)}%；你的風險偏好是${R.l}，成長型參考區間 ${lo}–${hi}%。${conc}`,
+  return {t:'資產配置',s,sum:gp<lo?'成長型偏低，可評估是否調整':gp>hi?'成長型偏高，留意市場大跌時的波動':'成長型比例落在偏好區間',basis:[`成長型 ${gp.toFixed(0)}%、防禦型 ${dfp.toFixed(0)}%、死水 ${dp.toFixed(0)}%`,`你的風險偏好是${R.l}，成長型參考區間 ${lo}–${hi}%`,conc.trim().replace(/。$/,'')],
     why:gp<lo?'成長型比例低於你選的偏好區間，長期資產成長可能較慢；但是否要調整，取決於年齡、投資年限與你能承受的波動。':gp>hi?'成長型比例高於你選的偏好區間，市場大跌時資產波動會比較大，也要留意是否過度集中。':'目前比例落在你選的偏好區間內。',
     act:gp<lo?'不必一次到位：可先確認緊急預備金已足夠，再依自己的年限與承受度決定是否調整；若你的實際風險承受度不同，可在上方更改風險偏好。':gp>hi?'檢視是否能承受單年 -30% 的波動；若不能，可評估把新增資金改投入防禦型資產，或到上方調整風險偏好。':'定期（例如每半年）檢視一次，偏離太多時用新增資金調整即可。'+(conc?' 也可考慮分散到其他市場。':'')};
 };
@@ -299,23 +299,23 @@ function diagHome(d,c,f){
   const ym=todayISO().slice(0,7), cur=d.tx.filter(t=>t.date.slice(0,7)===ym);   // 3 儲蓄率
   const inc=sumBy(cur.filter(t=>t.type==='income'),t=>t.amt), exp=sumBy(cur.filter(t=>t.type==='expense'),t=>t.amt), sal=monthInc(d), incB=sal>0?sal+sumBy(cur.filter(t=>t.type==='income'&&t.cat==='獎金'),t=>t.amt):inc, sr=incB>0&&exp>0?(incB-exp)/incB*100:null;   // 有固定分配就以它為收入基準，不必逐筆記收入
   out.push(sr==null?{t:'本月儲蓄率',s:'info',sum:monthInc(d)>0?'先記錄本月支出':'先填每月固定分配',basis:monthInc(d)>0?'本月還沒有支出記帳':'尚未填入每月固定分配，也沒有收入記帳',why:'儲蓄率 =（收入 − 支出）÷ 收入；收入以「固定分配」為準，不需要逐筆記收入。',act:(d.salary||0)>0?'到「每月記帳」記錄本月支出。':'到「資產細節」的現金分配填入固定分配。'}
-    :{t:'本月儲蓄率',s:sr<0?'warn':'good',sum:sr<0?'本月入不敷出，檢視大額支出':`儲蓄率 ${sr.toFixed(0)}%，月初數字偏樂觀`,basis:`收入 ${fmt(incB)}${sal>0?'（固定分配＋本月獎金）':''}、支出 ${fmt(exp)}，儲蓄率 ${sr.toFixed(0)}%`,
+    :{t:'本月儲蓄率',s:sr<0?'warn':'good',sum:sr<0?'本月入不敷出，檢視大額支出':`儲蓄率 ${sr.toFixed(0)}%`,basis:`收入 ${fmt(incB)}${sal>0?'（固定分配＋本月獎金）':''}、支出 ${fmt(exp)}`,
       why:(sr<0?'本月支出超過收入，需要動用存款。':'儲蓄率沒有放諸四海皆準的標準，取決於年齡、收入與目標；重點是和自己的 FIRE 目標及過去月份比較。')+'本月支出只計到目前已記帳的部分，月初的數字會偏樂觀。',
       act:sr<0?'檢視本月最大的支出分類，先區分哪些是一次性、哪些可以調整。':'到 FIRE 模擬器調整「每月投入」，看提高儲蓄對達成時間的影響。'});
   out.push(growthItem(d,c,R));   // 4 資產配置
   const ar=f.assets, rng=SCEN.map(([k,l])=>`${l} ${fireWhen(f.sc[k].real,d).replace(/（.*）/,'')}`).join('、');   // 5 FIRE
   if(f.target<=0&&!f.lean.covered) out.push({t:'FIRE 進度',s:'info',sum:'先填必要開銷才能計算',basis:'尚未設定必要開銷，無法計算 FIRE 目標',why:'FIRE 目標 = 年支出 ÷ 安全提領率。',act:'到「資產細節」填入必要開銷與選擇消費。'});
   else { const extra=Math.max(1000,Math.round(f.monthly*0.1/1000)*1000), m2=f.monthsAt(f.real.target,extra), m0=f.real.months;
-    out.push({t:'FIRE 進度（理想）',s:m0===0?'good':m0==null?'warn':'info',sum:m0===0?'已達到 FIRE 目標':m0==null?'100 年內無法達成，需提高投入':`達成率 ${f.real.pct.toFixed(0)}%，每月多投 ${fmt(extra)}，${m2!=null&&m0>m2?`可提早 ${fmtDur(m0-m2)}`:'幾乎沒差'}`,basis:`計入資產 ${fmt(ar.total)}，目標 ${fmt(f.real.target)}（今日幣值），達成率 ${f.real.pct.toFixed(1)}%；三種情境預計達成年份：${rng}`,
+    out.push({t:'FIRE 進度（理想）',s:m0===0?'good':m0==null?'warn':'info',sum:m0===0?'已達到 FIRE 目標':m0==null?'100 年內無法達成，需提高投入':`達成率 ${f.real.pct.toFixed(0)}%，每月多投 ${fmt(extra)}，${m2!=null&&m0>m2?`可提早 ${fmtDur(m0-m2)}`:'幾乎沒差'}`,basis:[`計入資產 ${fmt(ar.total)}，目標 ${fmt(f.real.target)}（今日幣值）`,`達成率 ${f.real.pct.toFixed(1)}%`,`三種情境預計達成年份：${rng}`],
       why:`結果取決於報酬率、通膨 ${f.cfg.infl}%、成本與稅費等假設；情境差距越大，代表預測越不確定。`,
-      act:m0===0?'已達到目標；可檢視提領計畫與稅費。':m0==null?'以目前投入 100 年內無法達成：提高每月投入、降低年支出，或重新檢視報酬假設。':`試算：每月多投入 ${fmt(extra)}，${m2!=null&&m0>m2?`約可提早 ${fmtDur(m0-m2)}`:'提早不到 1 個月'}。可到 FIRE 設定調整情境與納入資產。`}); }
+      act:m0===0?'已達到目標；可檢視提領計畫與稅費。':m0==null?'以目前投入 100 年內無法達成：提高每月投入、降低年支出，或重新檢視報酬假設。':'可到 FIRE 設定調整情境與納入資產，或到模擬器試算不同的每月投入。'}); }
   return out.slice(0,5);
 }
 function diagDetail(d,c,f){   // 每次畫面更新都依資產細節（現金分配、資產分類、帳戶、持股、獎金）重新產生，最多 5 點
   const R=riskOf(d), out=[], sal=monthInc(d), bal=sal-sumBy(d.allocation,catTotal), inv=catOf(d,'投資理財')+catOf(d,'未來基金');
   if(sal<=0) out.push({t:'現金流配置',s:'info',sum:'先填每月固定分配',basis:'尚未填入每月固定分配',why:'有固定分配金額，才能檢視每月的錢分配到哪裡。',act:'到「現金分配」填入固定分配。'});
-  else out.push({t:'現金流配置',s:bal<0?'warn':'good',sum:bal<0?`超出 ${fmt(-bal)}，可檢視選擇消費`:bal>0?`剩 ${fmt(bal)} 尚未指定用途`:'分配完整',basis:`固定分配 ${fmt(sal)}，已分配 ${fmt(sal-bal)}，${bal<0?`超出 ${fmt(-bal)}`:`剩餘 ${fmt(bal)}`}；投資理財＋未來基金 ${fmt(inv)}（佔 ${(inv/sal*100).toFixed(0)}%）`,
-    why:bal<0?'分配超過可支配金額，實際會用到存款或信用額度。':'沒有分配的餘額最容易不知不覺花掉；投資比例沒有通用標準，取決於你的目標與年限。',
+  else out.push({t:'現金流配置',s:bal<0?'warn':'good',sum:bal<0?`超出 ${fmt(-bal)}，可檢視選擇消費`:bal>0?`剩 ${fmt(bal)} 尚未指定用途`:'分配完整',basis:[`固定分配 ${fmt(sal)}，已分配 ${fmt(sal-bal)}，${bal<0?`超出 ${fmt(-bal)}`:`剩餘 ${fmt(bal)}`}`,`投資理財＋未來基金 ${fmt(inv)}（佔 ${(inv/sal*100).toFixed(0)}%）`],
+    why:bal<0?'分配超過可支配金額，實際會動用到存款。':'沒有分配的餘額最容易不知不覺花掉；投資比例沒有通用標準，取決於你的目標與年限。',
     act:bal<0?'可檢視「選擇消費」或其他子項目，讓分配不超過固定分配。':bal>0?`把剩餘 ${fmt(bal)} 指定用途（自動轉帳到投資理財／未來基金，或補預備金）；想知道投多少合適，可在 FIRE 模擬器試算。`:'分配完整；定期檢視是否符合目標。'});
   out.push(growthItem(d,c,R));
   { const mv=moveAdvice(d,c,f,R);   // 4 帳戶優化：只建議「還有空間」的較高利活存，已達上限的帳戶不會被建議
@@ -329,24 +329,31 @@ function diagDetail(d,c,f){   // 每次畫面更新都依資產細節（現金�
   const gone=[]; d.accounts.forEach(a=>AT.forEach(([k,l])=>{const e=a.m&&a.m[k]&&a.m[k].exp; if(e&&a[k]>0&&expDays(e)<-7) gone.push(`${a.name}${l}（${fmtDate(e)}）`);}));
   if(gone.length) out.push({t:'存款到期日已過',s:'warn',sum:`${gone.length} 項到期日已過，請更新利率或日期`,basis:`${gone.join('、')} 已超過到期日`,why:'到期後可能自動續存、轉活存或利率改變；系統仍照原利率計算利息，數字可能與實際不符。',act:'確認實際利率後，到銀行帳戶更新利率與到期日（沒有到期日可以清空）。'});
   if(soon.length) out.push({t:'存款即將到期',s:'warn',sum:'90 天內到期，先比較續存利率',basis:`${soon.join('、')} 在 90 天內到期`,why:'到期後多半自動轉成活存或以牌告利率續存，利率可能下降。',act:'現在就比較各銀行的續存利率，決定續存、轉存或提領。'});
-  { const cfgG=f.cfg, depR=depRateAll(d,c,cfgG), gi=goalInfo(d,cfgG,depR).info, act=(d.goals||[]).filter(g=>!g.done), msgs=[]; let lack=false;   // 未來目標：到期、放置方式、預估是否足夠、出金帳戶
+  { const cfgG=f.cfg, depR=depRateAll(d,c,cfgG), gi=goalInfo(d,cfgG,depR).info, act=(d.goals||[]).filter(g=>!g.done), msgs=[]; let lack=false, estSoon=false, placeBad=false, due=false;   // 未來目標：到期、放置方式、預估是否足夠、出金帳戶
     const pays=payAccts(d), pay=pays.length?{name:pays.map(a=>a.name).join('、'),demand:sumBy(pays,a=>a.demand||0)}:null;
     act.forEach(g=>{ const i=gi[g.id]; if(!i) return; const m=i.m;
-      if(i.st==='due'){ lack=true; msgs.unshift(`「${g.name}」已到期，請確認是否已支付（點該項目的狀態即可支付）`); }
-      if(g.est&&m!=null&&m<=12) msgs.push(`「${g.name}」的日期是估計的（約 ${g.date.slice(0,7).replace('-','/')}），快到了，請確認實際使用時間`);
+      if(i.st==='due'){ lack=true; due=true; msgs.unshift(`「${g.name}」已到期，請確認是否已支付（點該項目的狀態即可支付）`); }
+      if(g.est&&m!=null&&m<=12){ estSoon=true; msgs.push(`「${g.name}」的日期是估計的（約 ${g.date.slice(0,7).replace('-','/')}），快到了，請確認實際使用時間`); }
       if(i.st==='short'){ lack=true; msgs.push(`「${g.name}」依目前分配與保守估算，到期預估缺約 ${fmt(i.lack)}`); }
-      if(m!=null&&i.place==='cash'&&m>=60) msgs.push(`「${g.name}」還有約 ${Math.floor(m/12)} 年才會用，卻放在現金，可評估是否改為投資`);
-      if(m!=null&&i.place==='invest'&&m<=24) msgs.push(`「${g.name}」${m} 個月內要用，可評估逐步換回現金，降低下跌時不夠用的風險`); });
+      if(m!=null&&i.place==='cash'&&m>=60){ placeBad=true; msgs.push(`「${g.name}」還有約 ${Math.floor(m/12)} 年才會用，卻放在現金，可評估是否改為投資`); }
+      if(m!=null&&i.place==='invest'&&m<=24){ placeBad=true; msgs.push(`「${g.name}」${m} 個月內要用，可評估逐步換回現金，降低下跌時不夠用的風險`); } });
     const near=sumBy(act.filter(g=>{const i=gi[g.id];return i&&i.place==='cash'&&i.m!=null&&i.m<=12;}),g=>g.budget||0);
     if(!pay&&act.length) msgs.push('尚未指定未來基金出金帳戶，未來基金金額為 0（銀行帳戶展開後勾選）');
     if(near>0){ if(pay&&near>pay.demand){ lack=true; msgs.push(`12 個月內到期的現金目標共 ${fmt(near)}，超過出金帳戶「${pay.name}」活存餘額 ${fmt(pay.demand)}`); } }
     const und=act.filter(g=>goalMonths(g)==null&&!g.date).length;
     if(und>0) msgs.push(`${und} 個目標未填使用時間，資金暫時不計入 FIRE`);
-    if(msgs.length) out.push({t:'未來基金',s:lack?'warn':'info',sum:lack?`${msgs.length} 項需處理（缺口或已到期）`:`${msgs.length} 項待確認（日期、放置方式、出金帳戶）`,basis:msgs.slice(0,3).join('；')+(msgs.length>3?`…等 ${msgs.length} 項`:''),why:'有預計使用時間的目標會參與 FIRE 試算：未來基金依優先級與日期分配，到期前資金複利成長、到期時扣除預算；放置方式與時間不搭，會提高缺口或錯失成長。',act:'到「資產細節」指定未來基金出金帳戶；到「未來目標」填預計使用時間、選現金或投資；缺口大的調高每月分配或延後時間；到期後左滑按「支付」。'}); }
+    if(msgs.length) out.push({t:'未來基金',s:lack?'warn':'info',sum:lack?`${msgs.length} 項需處理（缺口或已到期）`:`${msgs.length} 項待確認（日期、放置方式、出金帳戶）`,basis:[...msgs.slice(0,3),...(msgs.length>3?[`…等共 ${msgs.length} 項`]:[])],why:'有預計使用時間的目標會參與 FIRE 試算：未來基金依優先級與日期分配，到期前資金複利成長、到期時扣除預算；放置方式與時間不搭，會提高缺口或錯失成長。',act:[ !pay&&act.length?'到銀行帳戶展開後勾選未來基金出金帳戶':'', und>0||estSoon?'到「未來基金」填入或確認預計使用時間':'', placeBad?'依使用時間調整現金或投資的放置方式':'', lack?'缺口大的可調高每月分配或延後時間':'', due?'到期的項目左滑按「支付」':'' ].filter(Boolean)}); }
   const bs=d.bonuses||[], nm=new Date().getMonth()+1;
-  if(bs.length){ const b=[...bs].sort((x,y)=>((x.month-nm+12)%12)-((y.month-nm+12)%12))[0],nj=b.inj||[];
-    out.push({t:'不定期獎金',s:'info',sum:nj.length?'已設定注入比例':'尚未設定注入比例，不計入試算',basis:`預期下一筆${b.name?`「${b.name}」`:''} ${b.month} 月 ${fmt(b.amt)}（實際金額每年不同）`,why:nj.length?'你已設定獎金的注入比例，會自動計入 FIRE 與未來基金的試算。':'尚未設定注入比例，獎金不會計入試算。',act:nj.length?`依設定注入 ${nj.map(i=>`${i.cat||'未選分類'} ${i.ratio||0}%`).join('、')}，其餘留作預備金或獎勵自己。`:'在獎金「編輯」設定要注入哪些分類與比例；也可先補足緊急預備金，再決定投入比例。'}); }
-  else out.push({t:'不定期獎金',s:'info',sum:'尚未設定獎金（沒有也可以略過）',basis:'尚未設定',why:'獎金是加速達成目標的重要來源，但需要先決定用途。',act:'在現金分配的「不定期獎金」按編輯新增。'});
+  if(bs.length){ const list=[...bs].sort((x,y)=>((x.month-nm+12)%12)-((y.month-nm+12)%12));   // 每一筆獎金都檢查注入比例：<100 才有「其餘」，=100 已全數分配，>100 要提醒
+    const info=list.map(b=>{ const nj=b.inj||[], rs=sumBy(nj,i=>i.ratio||0), left=Math.round((100-rs)*10)/10, nm2=b.name?`「${b.name}」`:'獎金', cats=nj.map(i=>`${i.cat||'未選分類'} ${i.ratio||0}%`).join('、');
+      return {b,nj,rs,left,nm2,cats,k:!nj.length?'none':rs>100?'over':left>0?'part':'full'}; });
+    const nNone=info.filter(x=>x.k==='none').length, nOver=info.filter(x=>x.k==='over').length, nPart=info.filter(x=>x.k==='part').length, nBad=nNone+nOver+nPart;
+    out.push({t:'不定期獎金',s:nOver?'warn':'info',
+      sum:nBad===0?(info.length>1?`${info.length} 筆獎金的注入比例都已全數分配`:'注入比例已全數分配'):[nNone&&`${nNone} 筆尚未設定`,nOver&&`${nOver} 筆合計超過 100%`,nPart&&`${nPart} 筆尚有未指定用途`].filter(Boolean).join('、'),
+      basis:info.map(x=>`${x.nm2} ${x.b.month} 月 ${fmt(x.b.amt)}`),
+      why:'已設定注入比例的獎金會計入 FIRE 與未來基金的試算，未設定的不計入；金額以預期值估算，實際每年不同。',
+      act:info.map(x=>x.k==='none'?`${x.nm2}：尚未設定注入比例，到獎金「編輯」設定分類與比例`:x.k==='over'?`${x.nm2}：${x.cats}，合計 ${x.rs}% 超過 100%，請到獎金「編輯」調整`:x.k==='part'?`${x.nm2}：${x.cats}，其餘 ${x.left}% 尚未指定用途，可到獎金「編輯」補上`:`${x.nm2}：${x.cats}`)}); }
+  else out.push({t:'不定期獎金',s:'info',sum:'尚未設定獎金（沒有也可以略過）',basis:'尚未設定',why:'有年終、績效等獎金時，設定後才會計入試算；沒有的話不需要處理。',act:'有獎金時，在現金分配的「不定期獎金」按編輯新增。'});
   return out.slice(0,7);
 }
 const r2=x=>Math.round(x*100)/100;
@@ -697,12 +704,12 @@ function FundCard({d,fund}) {
 function AiCard({title,items,risk,onRisk}) {
   const dot={good:'#22c55e',warn:'#ef4444',info:'#f59e0b'}, lab={good:'良好',warn:'需注意',info:'留意'};
   const [ex,setEx]=useState({}), [goodOpen,setGoodOpen]=useState(false), [info,setInfo]=useState(false);   // 預設全部收折，只看標題與一句依據
-  const L=({k,v})=><div className="text-xs leading-5 whitespace-normal mt-0.5"><span className="font-semibold text-zinc-500">{k}</span>　<span className="text-zinc-700">{v}</span></div>;
+  const L=({k,v})=>{ const a=(Array.isArray(v)?v:[v]).filter(Boolean); return <div className="mt-2"><div className="text-xs font-semibold text-zinc-500 leading-5">{k}</div>{a.length>1?<div className="flex flex-col gap-0.5">{a.map((t,i)=><div key={i} className="flex gap-1.5 text-xs leading-5 text-zinc-700"><span className="shrink-0">•</span><span className="min-w-0 whitespace-normal">{t}</span></div>)}</div>:<div className="text-xs leading-5 text-zinc-700 whitespace-normal">{a[0]}</div>}</div>; };
   const attn=items.filter(x=>x.s!=='good').sort((x,y)=>(x.s==='warn'?0:1)-(y.s==='warn'?0:1)), good=items.filter(x=>x.s==='good');
   const nW=items.filter(x=>x.s==='warn').length, nI=items.filter(x=>x.s==='info').length;
   const row=it=>{ const o=!!ex[it.t]; return (<div key={it.t} className="py-2.5 border-t-[0.5px] border-neutral-200">
     <div className="flex items-center gap-1.5 text-sm font-semibold cursor-pointer" onClick={()=>setEx(p=>({...p,[it.t]:!p[it.t]}))}><i className="w-2 h-2 rounded-full shrink-0" style={{background:dot[it.s]}}/><span className="flex-1 min-w-0 truncate">{it.t}</span><span className="text-[10px] font-normal text-zinc-400">{lab[it.s]}</span><Chev open={o}/></div>
-    {o?<><L k="判斷依據" v={it.basis}/><L k="建議原因" v={it.why}/><L k="可執行" v={it.act}/></>:<div className="text-[11px] text-zinc-500 leading-4 mt-0.5 pl-3.5 truncate">{it.sum||it.basis}</div>}</div>); };
+    {o?<><L k="判斷依據" v={it.basis}/><L k="建議原因" v={it.why}/><L k="可執行" v={it.act}/></>:<div className="text-[11px] text-zinc-500 leading-4 mt-0.5 pl-3.5 truncate">{it.sum||(Array.isArray(it.basis)?it.basis.join('；'):it.basis)}</div>}</div>); };
   return (<Card className="p-4"><div className="flex items-center gap-1.5"><span className="text-sm font-semibold"><TT n="heart-pulse">{title}</TT></span><button type="button" aria-label="健康檢查說明" onClick={()=>setInfo(v=>!v)} className={`w-3.5 h-3.5 rounded-full border text-[8px] shrink-0 leading-none ${info?'bg-black text-white border-black':'border-neutral-300 text-zinc-500'}`}>i</button></div>
     {info&&<div className="mt-2 mb-1 p-2.5 rounded-lg bg-neutral-50"><div className="text-[10px] text-zinc-500 whitespace-normal leading-4">依你的資產、記帳資料與所選風險偏好，以規則自動分析。以上為參考區間，不是適用每個人的投資建議；實際請依年齡、收入穩定度與目標年限調整，必要時諮詢專業人士。</div></div>}
     <div className="mb-2"/>

@@ -610,6 +610,25 @@ function Fit({children,className='',style,center}) {
   },[]);
   return <div ref={w} className={`overflow-hidden whitespace-nowrap ${className}`}><span ref={i} className="inline-block origin-left" style={style}>{children}</span></div>;
 }
+function FitGroup({className='',children}) {   // 同一區塊的數字統一縮放：以最寬的那個為準，大家同樣大小
+  const g=useRef(null);
+  const run=()=>{
+    const el=g.current; if(!el) return;
+    const xs=[...el.querySelectorAll('[data-fg]')]; if(!xs.length) return;
+    xs.forEach(x=>{x.style.fontSize='';});
+    let m=1; xs.forEach(x=>{ if(x.clientWidth>0&&x.scrollWidth>x.clientWidth) m=Math.max(m,x.scrollWidth/x.clientWidth); });
+    if(m>1){ const base=parseFloat(getComputedStyle(xs[0]).fontSize)||12; const px=Math.max(base/m,base*.5); xs.forEach(x=>{x.style.fontSize=px+'px';}); }
+  };
+  const ref=useRef(run); ref.current=run;
+  useLayoutEffect(run);
+  useEffect(()=>{
+    const f=()=>ref.current(); let ro=null,dead=false;
+    try{ if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{if(!dead)f();}); }catch(e){}
+    try{ if(window.ResizeObserver&&g.current){ ro=new ResizeObserver(f); ro.observe(g.current); } }catch(e){}
+    return ()=>{dead=true; if(ro) ro.disconnect();};
+  },[]);
+  return <div ref={g} className={className}>{children}</div>;
+}
 const Chev=({open})=>(<svg width="20" height="20" viewBox="0 0 20 20" className="opacity-50 shrink-0 transition-transform" style={{transform:`rotate(${open?90:0}deg)`}}><path d="M7.5 4.5L13 10l-5.5 5.5" fill="none" stroke="#000" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>);
 const Card=({className='',children,...p})=><div className={`bg-white rounded-lg border border-neutral-200 ${className}`} {...p}>{children}</div>;
 const addCommas=t=>{const [i,dd]=t.split('.');return i.replace(/\B(?=(\d{3})+(?!\d))/g,',')+(dd!==undefined?'.'+dd:'');};
@@ -1115,9 +1134,9 @@ function PageDetail({d,setD,c}) {
           {s.full?<circle cx="120" cy="120" r="120" fill={s.c}/>:<path d={s.path} fill={s.c} stroke="#fff" strokeWidth="1"/>}
           <text x={s.full?120:s.lx} y={s.full?120:s.ly} fontSize="11" fontWeight="600" fill="#fff" textAnchor="middle"><tspan x={s.full?120:s.lx} dy="-2">{s.k}</tspan><tspan x={s.full?120:s.lx} dy="12">{s.pct}%</tspan></text></g>)}
       </svg>
-      <div className="text-xs font-medium flex flex-col gap-1.5 min-w-0 flex-1">
-        {items.map(h=><div key={h.k} onClick={()=>setPie(h.k)} className="grid grid-cols-[5.5em_1fr] gap-2 items-center cursor-pointer"><span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full shrink-0" style={{background:h.c}}/>{h.k}</span><Fit className="min-w-0">{fmt(h.v)}</Fit></div>)}
-      </div>
+      <FitGroup className="text-xs font-medium flex flex-col gap-1.5 min-w-0 flex-1">
+        {items.map(h=><div key={h.k} onClick={()=>setPie(h.k)} className="grid grid-cols-[5.5em_1fr] gap-2 items-center cursor-pointer"><span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full shrink-0" style={{background:h.c}}/>{h.k}</span><span data-fg className="min-w-0 overflow-hidden whitespace-nowrap">{fmt(h.v)}</span></div>)}
+      </FitGroup>
     </div>
 
     <Card className="mx-4 mt-8 p-4">

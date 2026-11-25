@@ -591,13 +591,13 @@ const Ic=({n,s=16,w=1.8})=><svg aria-hidden="true" width={s} height={s} viewBox=
 const TT=({n,s=16,children})=><span className="inline-flex items-center gap-2"><Ic n={n} s={s}/>{children}</span>;   // 圖示＋標題文字（間距 8px、垂直置中）
 const TAB_ICONS=['wallet','chart-no-axes-combined','target','notebook-pen'];
 // 單行顯示；放不下時自動縮小字體（不換行）
-function Fit({children,className='',style,center}) {
+function Fit({children,className='',style,center,right}) {
   const w=useRef(null), i=useRef(null);
   const fit=()=>{
     const a=w.current,b=i.current; if(!a||!b) return;
     b.style.transform='none';
     const s=Math.min(1,a.clientWidth/b.offsetWidth);
-    if(s<1){ const k=Math.max(s,.3); b.style.transform=center?`translateX(${Math.max(0,(a.clientWidth-b.offsetWidth*k)/2)}px) scale(${k})`:`scale(${k})`; }
+    if(s<1){ const k=Math.max(s,.3); b.style.transform=center?`translateX(${Math.max(0,(a.clientWidth-b.offsetWidth*k)/2)}px) scale(${k})`:right?`translateX(${Math.max(0,a.clientWidth-b.offsetWidth*k)}px) scale(${k})`:`scale(${k})`; }
   };
   const fitRef=useRef(fit); fitRef.current=fit;
   useLayoutEffect(fit);
@@ -1335,8 +1335,8 @@ function PageGoals({d,setD,fund}) {
   const catN=k=>d.goals.filter(g=>!g.done&&(k==='all'||(g.pri||'mid')===k)).length, catS=k=>sumBy(d.goals.filter(g=>!g.done&&(k==='all'||(g.pri||'mid')===k)),g=>g.budget||0);
   const cats=['all',...['high','mid','low'].filter(k=>catN(k)>0)], catSel=cats.includes(catF)?catF:'all';
   const sortedG0=[...d.goals.filter(g=>!g.done).sort(goalCmp),...d.goals.filter(g=>g.done)], sortedG=catSel==='all'?sortedG0:sortedG0.filter(g=>!g.done&&(g.pri||'mid')===catSel);
-  const GR='grid grid-cols-[10px_1fr_76px_76px] gap-2 px-3 items-center';   // 項目最寬；預算、狀態等寬置中
-  const WR='grid grid-cols-[1fr_80px_44px] gap-2 px-3 items-center';
+  const GR='grid grid-cols-[10px_1fr_76px_76px] gap-2 px-3 items-center';   // 項目最寬；預算靠右、狀態置中
+  const WR=GR;   // 願望清單與未來基金項目同一組欄寬：預算欄、狀態／達成欄上下對齊（願望名稱跨前兩欄）
   return (<div className="px-4 pt-[17px]">
     <div className="grid grid-cols-2 gap-2.5 items-stretch">
         <div className="min-w-0 rounded-[18px] bg-[#F5E9DC] p-3 flex flex-col" aria-label="目前財務狀況">
@@ -1367,13 +1367,13 @@ function PageGoals({d,setD,fund}) {
     {cats.length>1&&<div className="mt-2" aria-label="未來基金分類"><div className="flex gap-1.5 overflow-x-auto pb-0.5">{cats.map(k=>{const on=catSel===k; return <button key={k} type="button" aria-pressed={on} aria-label={`分類 ${k==='all'?'全部':PRI[k].l}`} onClick={()=>setCatF(k)} className={`h-7 px-3 rounded-full text-xs shrink-0 inline-flex items-center gap-1.5 ${on?'bg-[#D68B4D] text-white font-medium':'bg-neutral-100 text-zinc-600'}`}>{k!=='all'&&<i className="w-1.5 h-1.5 rounded-full" style={{background:on?'#fff':PRI[k].c}}/>}{k==='all'?'全部':PRI[k].l}<span className={`text-[10px] tabular-nums ${on?'text-white/80':'text-zinc-400'}`}>{catN(k)}</span></button>;})}</div>
       <div className="text-[10px] text-zinc-400 mt-1.5 tabular-nums">{catSel==='all'?'全部進行中':`${PRI[catSel].l}優先級`}：{catN(catSel)} 項・預算 {fmt(catS(catSel))}</div></div>}
     <div className="mt-1">
-      <div className={`${GR} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span/><span>項目</span><span className="text-center">預算</span><span className="text-center">狀態</span></div>
+      <div className={`${GR} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span/><span>項目</span><span className="text-right">預算</span><span className="text-center">狀態</span></div>
       {sortedG.map(g=>{ const [stT,stC]=stOf(g), payable=!g.done&&GI[g.id]&&(GI[g.id].st==='ready'||GI[g.id].st==='due'); return (
         <div key={g.id} className="border-b-[0.5px] border-neutral-300 cursor-pointer" onClick={()=>openForm('goal',g)}>
           <div className={`${GR} h-11`}>
             <i className="w-2.5 h-2.5 rounded-full" style={{background:g.done||(GI[g.id]&&GI[g.id].st==='ready')?'#22c55e':PRI[g.pri].c}}/>
             <div className="min-w-0"><Fit className={`text-xs font-medium min-w-0 ${g.done?'text-zinc-400 line-through':''}`}>{g.name}</Fit><Fit className="text-[9px] text-zinc-400 min-w-0 leading-3">{subOf(g)}</Fit></div>
-            <Fit center className="text-[10px] font-medium text-zinc-500 min-w-0 text-center">{fmt(g.budget)}</Fit>
+            <Fit right className="text-[10px] font-medium text-zinc-500 min-w-0 text-right">{fmt(g.budget)}</Fit>
             {payable?<button type="button" aria-label={`支付「${g.name}」`} onClick={e=>{e.stopPropagation();payGoal(g);}} className="min-w-0 h-full"><Fit center className={`text-[10px] font-medium min-w-0 text-center underline decoration-dotted underline-offset-2 ${stC}`}>{stT}</Fit></button>
               :<Fit center className={`text-[10px] font-medium min-w-0 text-center ${stC}`}>{stT}</Fit>}
           </div>
@@ -1381,11 +1381,11 @@ function PageGoals({d,setD,fund}) {
     </div>
     <div className="mt-6 flex items-center justify-between"><div className="text-sm font-semibold"><TT n="gift">願望清單</TT></div><BI n="message-circle-plus" label="新增項目" onClick={()=>openForm('wish')}/></div>
     <div className="mt-1">
-      <div className={`${WR} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span>願望</span><span>預算</span><span className="text-center">達成</span></div>
+      <div className={`${WR} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span className="col-span-2">願望</span><span className="text-right">預算</span><span className="text-center">達成</span></div>
       {wishes.map(w=>(
         <div key={w.id} className={`${WR} h-10 cursor-pointer`} onClick={()=>openForm('wish',w)}>
-            <Fit className={`text-xs font-medium min-w-0 ${w.done?'text-zinc-400 line-through':''}`}>{w.name}</Fit>
-            <Fit className="text-[10px] font-medium text-zinc-500 min-w-0">{fmt(w.budget)}</Fit>
+            <Fit className={`col-span-2 text-xs font-medium min-w-0 ${w.done?'text-zinc-400 line-through':''}`}>{w.name}</Fit>
+            <Fit right className="text-[10px] font-medium text-zinc-500 min-w-0 text-right">{fmt(w.budget)}</Fit>
             <button onClick={e=>{e.stopPropagation();toggleWish(w.id);}} aria-label="達成" className={`w-5 h-5 rounded-lg mx-auto flex items-center justify-center text-white text-[11px] ${w.done?'bg-green-500':'bg-zinc-300'}`}>{w.done?'✓':''}</button>
           </div>))}
     </div>
@@ -1488,7 +1488,7 @@ function PageLedger({d,setD,onEdit,onInfo}) {
       {rows.map(r=><div key={r.c} className="grid grid-cols-[3.2em_minmax(0,1fr)_34px] gap-x-3 h-[25px] items-center text-xs tabular-nums">
         <Fit className={`font-semibold text-left ${cat}`}>{r.c}</Fit><Fit className={`font-medium text-right ${r.v?cat:'text-zinc-300'}`}>{r.v?fmt(r.v):'-'}</Fit><span className={`font-medium text-right ${r.v?sec:'text-zinc-300'}`}>{r.v?r.p+'%':'-'}</span></div>)}
     </div>);
-  const RC='relative grid grid-cols-[40px_minmax(0,0.8fr)_minmax(0,1.1fr)_minmax(0,1.5fr)_30px] gap-x-2 px-2.5 items-center';   // 日期｜分類｜項目（左對齊）｜金額（置中、最寬）｜備註（置中，30px 讓兩字表頭不換行）
+  const RC='relative grid grid-cols-[40px_minmax(0,0.8fr)_minmax(0,1.1fr)_minmax(0,1.5fr)_30px] gap-x-2 px-2.5 items-center';   // 日期｜分類｜項目（左對齊）｜金額（靠右、最寬）｜備註（置中，30px 讓兩字表頭不換行）
   return (<div className="px-4 pt-[17px] flex flex-col gap-3">
     <Card className="h-[102px] px-2 grid grid-cols-3 gap-2 items-center text-center">
       <div className="min-w-0"><div className="text-sm font-semibold leading-5">本月總收入</div><Fit className="text-lg font-semibold leading-7 text-green-700 mt-1">{fmt(tI)}</Fit></div>
@@ -1497,13 +1497,13 @@ function PageLedger({d,setD,onEdit,onInfo}) {
     </Card>
     <div className="flex gap-3"><Stat title="收入統計" color="text-[#246B43]" bg="bg-[#E8F3EB]" cat="text-[#315B43]" sec="text-[#718C79]" rows={iRows}/><Stat title="支出統計" color="text-[#A63838]" bg="bg-[#F8EAEA]" cat="text-[#684747]" sec="text-[#9B7777]" rows={eRows}/></div>
     <div className="mt-2">
-      <div className={`${RC} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span className="text-left whitespace-nowrap">日期</span><span className="text-left whitespace-nowrap">分類</span><span className="text-left whitespace-nowrap">項目</span><span className="text-center whitespace-nowrap">金額</span><span className="text-center whitespace-nowrap">備註</span></div>
+      <div className={`${RC} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span className="text-left whitespace-nowrap">日期</span><span className="text-left whitespace-nowrap">分類</span><span className="text-left whitespace-nowrap">項目</span><span className="text-right whitespace-nowrap">金額</span><span className="text-center whitespace-nowrap">備註</span></div>
       {!cur.length&&<div className="text-xs text-zinc-400 text-center py-6">本月尚無收支，按下方「+」新增</div>}
       {cur.map(t=>(
         <SwipeRow key={t.id} open={openId&&openId.id===t.id?openId.side:null} onOpen={side=>setOpenId({id:t.id,side})} onClose={()=>setOpenId(null)} onEdit={()=>{setOpenId(null);onEdit(t);}}>
           <div className={`${RC} h-[32px]`}>
             <i className={`absolute left-[2px] top-1/2 -translate-y-1/2 w-[5px] h-[5px] rounded-full ${t.type==='income'?'bg-green-500':t.type==='invest'?'bg-purple-500':'bg-red-500'}`}/>
-            <Fit className="min-w-0 text-left text-xs font-medium text-zinc-500">{fmtMD(t.date)}</Fit><Fit className="min-w-0 text-left text-xs font-semibold text-zinc-900">{t.cat}</Fit><Fit className="min-w-0 text-left text-xs font-medium text-zinc-900">{t.item}</Fit><Fit center className="min-w-0 text-center text-xs font-medium text-zinc-900 tabular-nums">{fmt(t.amt)}</Fit>
+            <Fit className="min-w-0 text-left text-xs font-medium text-zinc-500">{fmtMD(t.date)}</Fit><Fit className="min-w-0 text-left text-xs font-semibold text-zinc-900">{t.cat}</Fit><Fit className="min-w-0 text-left text-xs font-medium text-zinc-900">{t.item}</Fit><Fit right className="min-w-0 text-right text-xs font-medium text-zinc-900 tabular-nums">{fmt(t.amt)}</Fit>
             <button onClick={e=>{e.stopPropagation();onInfo(t);}} aria-label="備註" className={`w-4 h-4 justify-self-center rounded-full text-white text-[11px] font-bold flex items-center justify-center ${t.note?'bg-blue-500':'bg-neutral-300'}`}>i</button>
           </div>
         </SwipeRow>))}

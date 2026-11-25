@@ -1484,7 +1484,7 @@ function PageLedger({d,setD,onEdit,onInfo}) {
         <SwipeRow key={t.id} open={openId&&openId.id===t.id?openId.side:null} onOpen={side=>setOpenId({id:t.id,side})} onClose={()=>setOpenId(null)} onEdit={()=>{setOpenId(null);onEdit(t);}}>
           <div className={`${RC} h-[32px]`}>
             <i className={`absolute left-[2px] top-1/2 -translate-y-1/2 w-[5px] h-[5px] rounded-full ${t.type==='income'?'bg-green-500':t.type==='invest'?'bg-purple-500':'bg-red-500'}`}/>
-            <Fit className="min-w-0 text-left text-xs font-medium text-zinc-500">{fmtMD(t.date)}</Fit><Fit className="min-w-0 text-left text-xs font-semibold text-zinc-900">{t.cat}</Fit><Fit className="min-w-0 text-left text-xs font-normal text-zinc-900">{t.item}</Fit><Fit center className="min-w-0 text-center text-xs font-medium text-zinc-900 tabular-nums">{fmt(t.amt)}</Fit>
+            <Fit className="min-w-0 text-left text-xs font-medium text-zinc-500">{fmtMD(t.date)}</Fit><Fit className="min-w-0 text-left text-xs font-semibold text-zinc-900">{t.cat}</Fit><Fit className="min-w-0 text-left text-xs font-medium text-zinc-900">{t.item}</Fit><Fit center className="min-w-0 text-center text-xs font-medium text-zinc-900 tabular-nums">{fmt(t.amt)}</Fit>
             <button onClick={e=>{e.stopPropagation();onInfo(t);}} aria-label="備註" className={`w-4 h-4 justify-self-center rounded-full text-white text-[11px] font-bold flex items-center justify-center ${t.note?'bg-blue-500':'bg-neutral-300'}`}>i</button>
           </div>
         </SwipeRow>))}

@@ -1478,13 +1478,13 @@ function PageLedger({d,setD,onEdit,onInfo}) {
     </Card>
     <div className="flex gap-3"><Stat title="收入統計" color="text-[#246B43]" bg="bg-[#E8F3EB]" cat="text-[#315B43]" sec="text-[#718C79]" rows={iRows}/><Stat title="支出統計" color="text-[#A63838]" bg="bg-[#F8EAEA]" cat="text-[#684747]" sec="text-[#9B7777]" rows={eRows}/></div>
     <div className="mt-2">
-      <div className={`${RC} h-7 border-b-[0.5px] border-neutral-300 text-sm font-semibold text-zinc-500`}><span className="text-left whitespace-nowrap">日期</span><span className="text-left whitespace-nowrap">分類</span><span className="text-left whitespace-nowrap">項目</span><span className="text-center whitespace-nowrap">金額</span><span className="text-center whitespace-nowrap">備註</span></div>
+      <div className={`${RC} h-7 border-b-[0.5px] border-neutral-300 text-xs font-semibold text-zinc-500`}><span className="text-left whitespace-nowrap">日期</span><span className="text-left whitespace-nowrap">分類</span><span className="text-left whitespace-nowrap">項目</span><span className="text-center whitespace-nowrap">金額</span><span className="text-center whitespace-nowrap">備註</span></div>
       {!cur.length&&<div className="text-xs text-zinc-400 text-center py-6">本月尚無收支，按下方「+」新增</div>}
       {cur.map(t=>(
         <SwipeRow key={t.id} open={openId&&openId.id===t.id?openId.side:null} onOpen={side=>setOpenId({id:t.id,side})} onClose={()=>setOpenId(null)} onEdit={()=>{setOpenId(null);onEdit(t);}}>
           <div className={`${RC} h-[32px]`}>
             <i className={`absolute left-[2px] top-1/2 -translate-y-1/2 w-[5px] h-[5px] rounded-full ${t.type==='income'?'bg-green-500':t.type==='invest'?'bg-purple-500':'bg-red-500'}`}/>
-            <Fit className="min-w-0 text-left text-[15px] font-medium text-zinc-500">{fmtMD(t.date)}</Fit><Fit className="min-w-0 text-left text-base font-semibold text-zinc-900">{t.cat}</Fit><Fit className="min-w-0 text-left text-base font-normal text-zinc-900">{t.item}</Fit><Fit center className="min-w-0 text-center text-base font-medium text-zinc-900 tabular-nums">{fmt(t.amt)}</Fit>
+            <Fit className="min-w-0 text-left text-xs font-medium text-zinc-500">{fmtMD(t.date)}</Fit><Fit className="min-w-0 text-left text-xs font-semibold text-zinc-900">{t.cat}</Fit><Fit className="min-w-0 text-left text-xs font-normal text-zinc-900">{t.item}</Fit><Fit center className="min-w-0 text-center text-xs font-medium text-zinc-900 tabular-nums">{fmt(t.amt)}</Fit>
             <button onClick={e=>{e.stopPropagation();onInfo(t);}} aria-label="備註" className={`w-4 h-4 justify-self-center rounded-full text-white text-[11px] font-bold flex items-center justify-center ${t.note?'bg-blue-500':'bg-neutral-300'}`}>i</button>
           </div>
         </SwipeRow>))}

@@ -812,7 +812,8 @@ function RecSheet({d,setD,onClose}) {
 }
 function PageMy({d,setD,fund,c,mom}) {
   const mp=v=>v==null?'資料不足':fmtPct(v);
-  const [rec,setRec]=useState(false), [tip,setTip]=useState(null), [sheet,setSheet]=useState(null), [yrSel,setYrSel]=useState(null), [fEdit,setFEdit]=useState(false), [fInfo,setFInfo]=useState(false), [fInfoA,setFInfoA]=useState(false);
+  const [rec,setRec]=useState(false), [tip,setTip]=useState(null), [sheet,setSheet]=useState(null), [yrSel,setYrSel]=useState(null), [fEdit,setFEdit]=useState(false), [fInfo,setFInfo]=useState(false), [fInfoA,setFInfoA]=useState(false), [narrow,setNarrow]=useState(()=>typeof window!=='undefined'&&window.innerWidth<640);
+  useEffect(()=>{const f=()=>setNarrow(window.innerWidth<640); window.addEventListener('resize',f); return ()=>window.removeEventListener('resize',f);},[]);
   const pct=v=>c.total>0?(v/c.total*100).toFixed(1)+'%':'—', f=fireCalc(d,c);
   const cards=[['總資產',fmt(c.total),null,'較上月 '+mp(mom.total),null],
     ['現金',fmt(c.cash),pct(c.cash),mp(mom.cash),'cash'],
@@ -830,13 +831,16 @@ function PageMy({d,setD,fund,c,mom}) {
   let step=1, nT=5, bestMax=Infinity;
   for(let k=-2;k<14;k++) for(const mu of [1,2,2.5,5]) for(const n of [3,4,5]){ const st=mu*Math.pow(10,k), mx=st*n; if(mx>=need-1e-9&&mx<=need*1.03&&(mx<bestMax-1e-9||(Math.abs(mx-bestMax)<1e-9&&n>nT))){bestMax=mx;step=st;nT=n;} }
   if(bestMax===Infinity) for(const n of [4,5]){ const u=Math.pow(10,Math.floor(Math.log10(need/n))-1), st=Math.ceil(need/n/u-1e-9)*u, mx=st*n; if(mx<bestMax-1e-9||(Math.abs(mx-bestMax)<1e-9&&n>nT)){bestMax=mx;step=st;nT=n;} }
-  const yMax=nT*step, ticks=Array.from({length:nT+1},(_,k)=>k), Y0=66, YH=174;   // 圖表區 y=66～240：與上方圖例保留距離
+  const yMax=nT*step, ticks=Array.from({length:nT+1},(_,k)=>k), Y0=50, YH=190;   // 圖表區 y=50～240（圖例已移到 X 軸下方）
   const fmtY=v=>HIDE?'••':v===0?'$0':v>=1e9?`$${+(v/1e9).toFixed(2)}B`:v>=1e6?`$${(v/1e6).toFixed(2).replace(/(\.\d)0$/,'$1')}M`:v>=1e3?`$${+(v/1e3).toFixed(1)}K`:`$${+v.toFixed(0)}`;
-  const x=m=>48+(m-1)*(288/11), y=v=>240-Math.max(0,v)/yMax*YH;
+  const x=m=>56+(m-1)*(280/11), y=v=>240-Math.max(0,v)/yMax*YH;
   const LINES=[['total','總資產','#2563eb'],['cash','現金','#22c55e'],['fixed','定存','#15803d'],['invest','投資','#a855f7']];
   const path=k=>hs.map((r,i)=>(i?'L':'M')+x(r.m).toFixed(1)+' '+y(r[k]).toFixed(1)).join(' ');
-  const area=hs.length>1?`${path('total')} L${x(hs[hs.length-1].m).toFixed(1)} 240 L${x(hs[0].m).toFixed(1)} 240 Z`:'';
-  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const months=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];   // 手機版隔月顯示文字（1,3,5,7,9,11），資料與折線仍為 12 個月
+  const sol=hs.filter(r=>r.ym<=nowYM), fut=hs.filter(r=>r.ym>nowYM), dash=sol.length&&fut.length?[sol[sol.length-1],...fut]:fut;   // 歷史／當月＝實線；當月之後＝虛線（只畫實際有資料的月份，不補 0）
+  const pathOf=(k,a)=>a.map((r,i)=>(i?'L':'M')+x(r.m).toFixed(1)+' '+y(r[k]).toFixed(1)).join(' ');
+  const hasNow=hs.some(r=>r.ym===nowYM);
+  const area=sol.length>1?`${pathOf('total',sol)} L${x(sol[sol.length-1].m).toFixed(1)} 240 L${x(sol[0].m).toFixed(1)} 240 Z`:'';
   return (<div className="pt-[17px] flex flex-col gap-4">
     <div className="flex gap-3 overflow-x-auto no-sb pl-4 snap-x scroll-pl-4">
       {cards.map((cd,i)=>(
@@ -859,14 +863,15 @@ function PageMy({d,setD,fund,c,mom}) {
         <svg x="16" y="14" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" dangerouslySetInnerHTML={{__html:LUCIDE['trending-up']}}/>
         <text x="40" y="29" fontSize="14" fontWeight="600">{yr}資產變化</text>
         {years.length>1&&<g fontSize="14" fill="#52525b"><text x="200" y="29" textAnchor="middle" style={{cursor:'pointer',opacity:yi>0?1:.25}} onClick={e=>{e.stopPropagation();if(yi>0){setYrSel(years[yi-1]);setTip(null);}}}>‹</text><text x="222" y="29" textAnchor="middle" style={{cursor:'pointer',opacity:yi<years.length-1?1:.25}} onClick={e=>{e.stopPropagation();if(yi<years.length-1){setYrSel(years[yi+1]);setTip(null);}}}>›</text></g>}
-        {LINES.map(([k,l,col],i)=><g key={k} transform={`translate(${16+i*58},46)`}><circle cx="4" cy="0" r="4" fill={col}/><text x="12" y="3.5" fontSize="10" fill="#52525b">{l}</text></g>)}
-        {live.length>0&&yr===nowY&&<text x="262" y="49" fontSize="9" fill="#a1a1aa">○ 本月即時</text>}
-        {ticks.map(k=>{const gy=240-k*YH/nT; return <line key={k} x1="48" x2="336" y1={gy} y2={gy} stroke="#e5e5e5" strokeOpacity={k===0?1:.5}/>;})}
+        {(()=>{let lx=56; const it=[...LINES.map(([k,l,col])=>({l,col,w:k==='total'?3:2,dash:false,dot:false})),...(dash.length>1?[{l:'預測',col:'#a1a1aa',w:1.6,dash:true,dot:false}]:[]),...(hasNow&&yr===nowY?[{l:'本月',col:'#71717a',w:0,dash:false,dot:true}]:[])];
+          return it.map(o=>{const g=<g key={o.l} transform={`translate(${lx},0)`}>{o.dot?<circle cx="7" cy="274" r="3.2" fill="#fff" stroke={o.col} strokeWidth="1.5"/>:<line x1="0" x2="14" y1="274" y2="274" stroke={o.col} strokeWidth={o.w} strokeLinecap="round" strokeDasharray={o.dash?'4 3':undefined}/>}<text x="19" y="277.5" fontSize="10" fill={o.col==='#a1a1aa'||o.dot?'#71717a':'#52525b'}>{o.l}</text></g>; lx+=o.l.length*10+28; return g;});})()}
+        {ticks.map(k=>{const gy=240-k*YH/nT; return <line key={k} x1="56" x2="336" y1={gy} y2={gy} stroke="#e5e5e5" strokeOpacity={k===0?1:.5}/>;})}
         {ticks.map(k=><text key={k} x="42" y={243-k*YH/nT} fontSize="10" fill="#71717a" textAnchor="end">{fmtY(k*step)}</text>)}
-        {months.map((m,i)=><text key={m} x={x(i+1)} y="254" fontSize="10" fill="#71717a" textAnchor="middle">{m}</text>)}
+        {months.map((m,i)=>(!narrow||i%2===0)?<text key={m} x={x(i+1)} y="254" fontSize="10" fill="#71717a" textAnchor="middle">{m}</text>:<line key={m} x1={x(i+1)} x2={x(i+1)} y1="240" y2="243" stroke="#d4d4d8"/>)}
         {area&&<path d={area} fill="url(#g)"/>}
-        {hs.length>1&&LINES.map(([k,,col])=><path key={k} d={path(k)} fill="none" stroke={col} strokeWidth={k==='total'?3:2} strokeLinejoin="round" strokeLinecap="round"/>)}
-        {hs.map(r=>LINES.map(([k,l,col])=><g key={r.m+k} style={{cursor:'pointer'}} onMouseEnter={()=>setTip({m:r.m,l,v:r[k]})} onClick={e=>{e.stopPropagation();setTip({m:r.m,l,v:r[k]});}}><circle cx={x(r.m)} cy={y(r[k])} r="9" fill="transparent"/><circle cx={x(r.m)} cy={y(r[k])} r={k==='total'?3.5:3} fill={r.live?'#fff':col} stroke={col} strokeWidth="1.5"/></g>))}
+        {sol.length>1&&LINES.map(([k,,col])=><path key={k} d={pathOf(k,sol)} fill="none" stroke={col} strokeWidth={k==='total'?3:1.8} strokeLinejoin="round" strokeLinecap="round"/>)}
+        {dash.length>1&&LINES.map(([k,,col])=><path key={'d'+k} d={pathOf(k,dash)} fill="none" stroke={col} strokeWidth={k==='total'?3:1.8} strokeDasharray="5 4" strokeLinecap="round"/>)}
+        {hs.map(r=>LINES.map(([k,l,col])=><g key={r.m+k} style={{cursor:'pointer'}} onMouseEnter={()=>setTip({m:r.m,l,v:r[k]})} onClick={e=>{e.stopPropagation();setTip({m:r.m,l,v:r[k]});}}><circle cx={x(r.m)} cy={y(r[k])} r="9" fill="transparent"/><circle cx={x(r.m)} cy={y(r[k])} r={k==='total'?3.5:3} fill={r.ym===nowYM?'#fff':col} stroke={col} strokeWidth="1.5"/></g>))}
         {tip&&(()=>{const tx=x(tip.m),ty=y(tip.v),w=150,bx=Math.min(Math.max(tx-w/2,4),357-w);return <g pointerEvents="none"><rect x={bx} y={ty-38} width={w} height="26" rx="6" fill="#18181b" opacity=".92"/><text x={bx+w/2} y={ty-21} fontSize="11" fill="#fff" textAnchor="middle">{`${tip.m}月 ${tip.l} ${fmt(tip.v)}`}</text></g>;})()}
       </svg>
     </Card>
@@ -1335,7 +1340,7 @@ function PageGoals({d,setD,fund}) {
   const catN=k=>d.goals.filter(g=>!g.done&&(k==='all'||(g.pri||'mid')===k)).length, catS=k=>sumBy(d.goals.filter(g=>!g.done&&(k==='all'||(g.pri||'mid')===k)),g=>g.budget||0);
   const cats=['all',...['high','mid','low'].filter(k=>catN(k)>0)], catSel=cats.includes(catF)?catF:'all';
   const sortedG0=[...d.goals.filter(g=>!g.done).sort(goalCmp),...d.goals.filter(g=>g.done)], sortedG=catSel==='all'?sortedG0:sortedG0.filter(g=>!g.done&&(g.pri||'mid')===catSel);
-  const GR='grid grid-cols-[10px_1fr_76px_76px] gap-2 px-3 items-center';   // 項目最寬；預算靠右、狀態置中
+  const GR='grid grid-cols-[10px_120px_1fr_76px] gap-2 px-3 items-center';   // 項目約 10 字寬；剩餘寬度給預算（靠右）；狀態置中
   const WR=GR;   // 願望清單與未來基金項目同一組欄寬：預算欄、狀態／達成欄上下對齊（願望名稱跨前兩欄）
   return (<div className="px-4 pt-[17px]">
     <div className="grid grid-cols-2 gap-2.5 items-stretch">
@@ -1373,7 +1378,7 @@ function PageGoals({d,setD,fund}) {
           <div className={`${GR} h-11`}>
             <i className="w-2.5 h-2.5 rounded-full" style={{background:g.done||(GI[g.id]&&GI[g.id].st==='ready')?'#22c55e':PRI[g.pri].c}}/>
             <div className="min-w-0"><Fit className={`text-xs font-medium min-w-0 ${g.done?'text-zinc-400 line-through':''}`}>{g.name}</Fit><Fit className="text-[9px] text-zinc-400 min-w-0 leading-3">{subOf(g)}</Fit></div>
-            <Fit right className="text-[10px] font-medium text-zinc-500 min-w-0 mr-3 text-right">{fmt(g.budget)}</Fit>
+            <Fit right className="text-[13px] font-medium text-zinc-500 min-w-0 mr-3 text-right">{fmt(g.budget)}</Fit>
             {payable?<button type="button" aria-label={`支付「${g.name}」`} onClick={e=>{e.stopPropagation();payGoal(g);}} className="min-w-0 h-full"><Fit center className={`text-[10px] font-medium min-w-0 text-center underline decoration-dotted underline-offset-2 ${stC}`}>{stT}</Fit></button>
               :<Fit center className={`text-[10px] font-medium min-w-0 text-center ${stC}`}>{stT}</Fit>}
           </div>
@@ -1385,7 +1390,7 @@ function PageGoals({d,setD,fund}) {
       {wishes.map(w=>(
         <div key={w.id} className={`${WR} h-10 cursor-pointer`} onClick={()=>openForm('wish',w)}>
             <Fit className={`col-span-2 text-xs font-medium min-w-0 ${w.done?'text-zinc-400 line-through':''}`}>{w.name}</Fit>
-            <Fit right className="text-[10px] font-medium text-zinc-500 min-w-0 mr-3 text-right">{fmt(w.budget)}</Fit>
+            <Fit right className="text-[13px] font-medium text-zinc-500 min-w-0 mr-3 text-right">{fmt(w.budget)}</Fit>
             <button onClick={e=>{e.stopPropagation();toggleWish(w.id);}} aria-label="達成" className={`w-5 h-5 rounded-lg mx-auto flex items-center justify-center text-white text-[11px] ${w.done?'bg-green-500':'bg-zinc-300'}`}>{w.done?'✓':''}</button>
           </div>))}
     </div>
